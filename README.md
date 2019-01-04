@@ -1,3 +1,12 @@
+**Fork of https://github.com/puppetlabs/pdk**:
+
+Changes from upstream:
+
+* Addition of this notice
+* Gem name changed to pdk-akerl
+* Addition of .prospectus file
+* Update of Bundler and Ruby dependencies (https://github.com/puppetlabs/pdk/pull/610)
+
 # pdk [![Build Status](https://travis-ci.org/puppetlabs/pdk.svg?branch=master)](https://travis-ci.org/puppetlabs/pdk) [![Appveyor Build Status](https://ci.appveyor.com/api/projects/status/x70e2fqllbaootpd?svg=true)](https://ci.appveyor.com/project/puppetlabs/pdk) [![Coverage Status](https://coveralls.io/repos/github/puppetlabs/pdk/badge.svg?branch=master)](https://coveralls.io/github/puppetlabs/pdk?branch=master)
 
 * [Installation](#installation)

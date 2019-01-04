@@ -5,8 +5,8 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'pdk/version'
 
 Gem::Specification.new do |spec|
-  spec.name    = 'pdk'
-  spec.version = PDK::VERSION
+  spec.name    = 'pdk-akerl'
+  spec.version = PDK::VERSION + '.1'
   spec.authors = ['Puppet, Inc.']
   spec.email   = ['pdk-maintainers@puppet.com']
 
