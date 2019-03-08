@@ -117,7 +117,7 @@ module PDK
             dest_status = :delete
           else
             begin
-              dest_content = PDK::TemplateFile.new(File.join(template_loc, template_file), configs: config).render
+              dest_content = PDK::TemplateFile.new(File.join(template_loc, template_file), configs: config, template_dir: self).render
             rescue => e
               error_msg = _(
                 "Failed to render template '%{template}'\n" \
@@ -269,8 +269,14 @@ module PDK
         if File.file?(loc) && File.readable?(loc)
           begin
             YAML.safe_load(File.read(loc), [], [], true)
-          rescue StandardError => e
-            PDK.logger.warn(_("'%{file}' is not a valid YAML file: %{message}") % { file: loc, message: e.message })
+          rescue Psych::SyntaxError => e
+            PDK.logger.warn _("'%{file}' is not a valid YAML file: %{problem} %{context} at line %{line} column %{column}") % {
+              file:    loc,
+              problem: e.problem,
+              context: e.context,
+              line:    e.line,
+              column:  e.column,
+            }
             {}
           end
         else
@@ -294,11 +300,13 @@ module PDK
         clone_result = PDK::Util::Git.git('clone', origin_repo, temp_dir)
 
         if clone_result[:exit_code].zero?
-          reset_result = PDK::Util::Git.git('-C', temp_dir, 'reset', '--hard', git_ref)
-          unless reset_result[:exit_code].zero?
-            PDK.logger.error reset_result[:stdout]
-            PDK.logger.error reset_result[:stderr]
-            raise PDK::CLI::FatalError, _("Unable to set HEAD of git repository at '%{repo}' to ref:'%{ref}'.") % { repo: temp_dir, ref: git_ref }
+          Dir.chdir(temp_dir) do
+            reset_result = PDK::Util::Git.git('reset', '--hard', git_ref)
+            unless reset_result[:exit_code].zero?
+              PDK.logger.error reset_result[:stdout]
+              PDK.logger.error reset_result[:stderr]
+              raise PDK::CLI::FatalError, _("Unable to set HEAD of git repository at '%{repo}' to ref:'%{ref}'.") % { repo: temp_dir, ref: git_ref }
+            end
           end
         else
           PDK.logger.error clone_result[:stdout]

@@ -94,7 +94,7 @@ module PDK
         end
 
         def context=(new_context)
-          unless [:system, :module].include?(new_context)
+          unless [:system, :module, :pwd].include?(new_context)
             raise ArgumentError, _("Expected execution context to be :system or :module but got '%{context}'.") % { context: new_context }
           end
 
@@ -132,7 +132,7 @@ module PDK
 
           @process.environment['BUNDLE_IGNORE_CONFIG'] = '1'
 
-          if context == :module
+          if [:module, :pwd].include?(context)
             @process.environment['GEM_HOME'] = PDK::Util::RubyVersion.gem_home
             @process.environment['GEM_PATH'] = PDK::Util::RubyVersion.gem_path
 
@@ -143,8 +143,8 @@ module PDK
               File.join(@process.environment['GEM_HOME'], 'bin'),
               PDK::Util::RubyVersion.gem_paths_raw.map { |gem_path| File.join(gem_path, 'bin') },
               package_binpath,
-              ENV['PATH'],
               PDK::Util.package_install? ? PDK::Util::Git.git_paths : nil,
+              ENV['PATH'],
             ].compact.flatten.join(File::PATH_SEPARATOR)
 
             mod_root = PDK::Util.module_root
@@ -155,7 +155,7 @@ module PDK
               raise PDK::CLI::FatalError, _('Current working directory is not part of a module. (No metadata.json was found.)')
             end
 
-            if Dir.pwd == mod_root
+            if Dir.pwd == mod_root || context == :pwd
               run_process_in_clean_env!
             else
               Dir.chdir(mod_root) do
