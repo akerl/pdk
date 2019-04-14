@@ -1,7 +1,6 @@
 require 'fileutils'
 require 'serverspec'
 require 'tmpdir'
-require 'rspec/xsd'
 require 'open3'
 require 'pdk/generate/module'
 
@@ -61,7 +60,7 @@ Specinfra.configuration.env = bundler_env.dup
 RSpec.configure do |c|
   c.before(:suite) do
     RSpec.configuration.template_dir = Dir.mktmpdir
-    output, status = Open3.capture2e('git', 'clone', '--bare', PDK::Util.default_template_url, RSpec.configuration.template_dir)
+    output, status = Open3.capture2e('git', 'clone', '--bare', PDK::Util::TemplateURI.default_template_uri, RSpec.configuration.template_dir)
     raise "Failed to cache module template: #{output}" unless status.success?
 
     tempdir = Dir.mktmpdir
@@ -86,7 +85,7 @@ RSpec.configure do |c|
   c.expect_with(:rspec) do |e|
     e.include_chain_clauses_in_custom_matcher_descriptions = true
   end
-  c.include RSpec::XSD
   c.add_setting :fixtures_path, default: File.join(File.dirname(__FILE__), 'fixtures')
   c.add_setting :template_dir
+  c.profile_examples = true
 end

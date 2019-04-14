@@ -4,7 +4,6 @@ shared_context :with_puppet_object_module_metadata do
   let(:module_metadata) { '{"name": "testuser-test_module"}' }
 
   before(:each) do
-    allow(PDK::Util).to receive(:package_install?).and_return(false)
     allow(File).to receive(:file?).with(metadata_path).and_return(true)
     allow(File).to receive(:readable?).with(metadata_path).and_return(true)
     allow(File).to receive(:read).with(metadata_path).and_return(module_metadata)
@@ -21,6 +20,9 @@ describe PDK::Generate::PuppetObject do
 
   before(:each) do
     stub_const('PDK::Generate::PuppetObject::OBJECT_TYPE', object_type)
+    allow(PDK::Util).to receive(:package_install?).and_return(false)
+    allow(PDK::Util).to receive(:module_root).and_return(module_dir)
+    allow(PDK).to receive(:answers).and_return({})
   end
 
   describe '#template_data' do
@@ -76,7 +78,8 @@ describe PDK::Generate::PuppetObject do
     let(:dest_dir) { File.dirname(dest_path) }
     let(:template_path) { '/path/to/file/template' }
     let(:template_data) { { some: 'data', that: 'the', template: 'needs' } }
-    let(:template_file) { instance_double(PDK::TemplateFile, render: 'rendered file content') }
+    let(:template_content) { 'rendered file content' }
+    let(:template_file) { instance_double(PDK::TemplateFile, render: template_content) }
     let(:rendered_file) { StringIO.new }
 
     before(:each) do
@@ -95,7 +98,7 @@ describe PDK::Generate::PuppetObject do
       allow(FileUtils).to receive(:mkdir_p).with(dest_dir)
       templated_object.render_file(dest_path, template_path, template_data)
       rendered_file.rewind
-      expect(rendered_file.read).to eq('rendered file content')
+      expect(rendered_file.read).to eq(template_content + "\n")
     end
 
     context 'when it fails to create the parent directories' do
@@ -140,14 +143,15 @@ describe PDK::Generate::PuppetObject do
       allow(default_templatedir).to receive(:object_config).and_return(configs_hash)
       allow(cli_templatedir).to receive(:object_config).and_return(configs_hash)
       allow(metadata_templatedir).to receive(:object_config).and_return(configs_hash)
-      allow(PDK::Module::TemplateDir).to receive(:new).with(PDK::Util.default_template_url).and_yield(default_templatedir)
+      allow(PDK::Module::TemplateDir).to receive(:new).with(any_args).and_yield(default_templatedir)
+      allow(PDK::Util).to receive(:development_mode?).and_return(true)
     end
 
     context 'when a template-url is provided on the CLI' do
       let(:options) { { :'template-url' => '/some/path' } }
 
       before(:each) do
-        allow(PDK::Module::TemplateDir).to receive(:new).with(options[:'template-url']).and_yield(cli_templatedir)
+        allow(PDK::Module::TemplateDir).to receive(:new).with(Addressable::URI.parse('/some/path#master')).and_yield(cli_templatedir)
       end
 
       context 'and a template for the object type exists' do
@@ -176,7 +180,7 @@ describe PDK::Generate::PuppetObject do
         let(:module_metadata) { '{"name": "testuser-test_module", "template-url": "/some/other/path"}' }
 
         before(:each) do
-          allow(PDK::Module::TemplateDir).to receive(:new).with('/some/other/path').and_yield(metadata_templatedir)
+          allow(PDK::Module::TemplateDir).to receive(:new).with(Addressable::URI.parse('/some/other/path')).and_yield(metadata_templatedir)
         end
 
         context 'and a template for the object type exists' do
