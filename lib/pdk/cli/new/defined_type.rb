@@ -22,6 +22,10 @@ module PDK::CLI
         raise PDK::CLI::ExitWithError, _("'%{name}' is not a valid defined type name") % { name: defined_type_name }
       end
 
+      PDK::CLI::Util.analytics_screen_view('new_defined_type', opts)
+
+      require 'pdk/generate/defined_type'
+
       PDK::Generate::DefinedType.new(module_dir, defined_type_name, opts).run
     end
   end

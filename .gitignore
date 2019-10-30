@@ -61,6 +61,7 @@ build-iPhoneSimulator/
 /spec/reports/
 /tmp/
 /vendor/gems/
+Gemfile.local
 
 # ignore bundler generated binstubs, but keep setup/console scripts
 /bin/*
@@ -75,5 +76,8 @@ build-iPhoneSimulator/
 /archive/
 /sut-files.tgz
 
-+# Puppet packaging files
- +/ext/packaging/
+# Puppet packaging files
+/ext/packaging/
+
+# generated artifacts from rake tasks
+/output

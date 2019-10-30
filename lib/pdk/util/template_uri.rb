@@ -1,9 +1,16 @@
-require 'pdk/util'
-
 module PDK
   module Util
     class TemplateURI
       SCP_PATTERN = %r{\A(?!\w+://)(?:(?<user>.+?)@)?(?<host>[^:/]+):(?<path>.+)\z}
+
+      PACKAGED_TEMPLATE_KEYWORD = 'pdk-default'.freeze
+      DEPRECATED_TEMPLATE_URL = 'https://github.com/puppetlabs/pdk-module-template'.freeze
+
+      LEGACY_PACKAGED_TEMPLATE_PATHS = {
+        'windows' => 'file:///C:/Program Files/Puppet Labs/DevelopmentKit/share/cache/pdk-templates.git',
+        'macos'   => 'file:///opt/puppetlabs/pdk/share/cache/pdk-templates.git',
+        'linux'   => 'file:///opt/puppetlabs/pdk/share/cache/pdk-templates.git',
+      }.freeze
 
       # XXX Previously
       # - template_uri used to get the string form of the uri when generating the module and written to pdk answers and metadata
@@ -25,10 +32,19 @@ module PDK
       # /c:/foo#master (internal use only)
       #
       def initialize(opts_or_uri)
+        require 'addressable'
+
         # If a uri string is passed, skip the valid uri finding code.
-        @uri = if opts_or_uri.is_a?(String) || opts_or_uri.is_a?(self.class)
+        @uri = if opts_or_uri.is_a?(self.class)
+                 opts_or_uri.uri
+               elsif opts_or_uri.is_a?(String)
                  begin
-                   Addressable::URI.parse(opts_or_uri)
+                   uri, ref = opts_or_uri.split('#', 2)
+                   if self.class.packaged_template?(uri)
+                     self.class.default_template_uri(ref).uri
+                   else
+                     Addressable::URI.parse(opts_or_uri)
+                   end
                  rescue Addressable::URI::InvalidURIError
                    raise PDK::CLI::FatalError, _('PDK::Util::TemplateURI attempted initialization with a non-uri string: {string}') % { string: opts_or_uri }
                  end
@@ -48,7 +64,11 @@ module PDK
       #
       # @returns String
       def metadata_format
-        self.class.human_readable(@uri.to_s)
+        if self.class.packaged_template?(git_remote)
+          self.class.human_readable("pdk-default##{git_ref}")
+        else
+          self.class.human_readable(@uri.to_s)
+        end
       end
       alias to_s metadata_format
       alias to_str metadata_format
@@ -61,6 +81,8 @@ module PDK
       end
 
       def self.git_remote(uri)
+        require 'addressable'
+
         if uri.is_a?(Addressable::URI) && uri.fragment
           human_readable(uri.to_s.chomp('#' + uri.fragment))
         else
@@ -76,11 +98,7 @@ module PDK
 
       # @returns String
       def git_ref
-        if @uri.fragment
-          @uri.fragment
-        else
-          self.class.default_template_ref
-        end
+        @uri.fragment || self.class.default_template_ref(self)
       end
 
       def git_ref=(ref)
@@ -88,11 +106,14 @@ module PDK
       end
 
       # @returns PDK::Util::TemplateURI
-      def self.default_template_uri
+      def self.default_template_uri(ref = nil)
+        require 'pdk/util'
+        require 'addressable'
+
         if PDK::Util.package_install?
-          PDK::Util::TemplateURI.new(Addressable::URI.new(scheme: 'file', host: '', path: File.join(PDK::Util.package_cachedir, 'pdk-templates.git')))
+          PDK::Util::TemplateURI.new(Addressable::URI.new(scheme: 'file', host: '', path: File.join(PDK::Util.package_cachedir, 'pdk-templates.git'), fragment: ref))
         else
-          PDK::Util::TemplateURI.new('https://github.com/puppetlabs/pdk-templates')
+          PDK::Util::TemplateURI.new(Addressable::URI.new(scheme: 'https', host: 'github.com', path: '/puppetlabs/pdk-templates', fragment: ref))
         end
       end
 
@@ -101,16 +122,19 @@ module PDK
       end
 
       def ref_is_tag?
+        require 'pdk/util/git'
+
         PDK::Util::Git.git('ls-remote', '--tags', '--exit-code', git_remote, git_ref)[:exit_code].zero?
       end
 
       # `C:...` urls are not URI-safe. They should be of the form `/C:...` to
       # be URI-safe. scp-like urls like `user@host:/path` are not URI-safe
-      # either but are not handled here. Should they be?
+      # either and so are subsequently converted to ssh:// URIs.
       #
       # @returns String
       def self.uri_safe(string)
-        (Gem.win_platform? && string =~ %r{^[a-zA-Z][\|:]}) ? "/#{string}" : string
+        url = (Gem.win_platform? && string =~ %r{^[a-zA-Z][\|:]}) ? "/#{string}" : string
+        parse_scp_url(url)
       end
 
       # If the passed value is a URI-safe windows path such as `/C:...` then it
@@ -122,6 +146,30 @@ module PDK
         (Gem.win_platform? && string =~ %r{^\/[a-zA-Z][\|:]}) ? string[1..-1] : string
       end
 
+      def self.parse_scp_url(url)
+        require 'pathname'
+        require 'addressable'
+
+        # Valid URIs to avoid catching:
+        # - absolute local paths
+        # - have :'s in paths when preceeded by a slash
+        # - have only digits following the : and preceeding a / or end-of-string that is 0-65535
+        # The last item is ambiguous in the case of scp/git paths vs. URI port
+        # numbers, but can be made unambiguous by making the form to
+        # ssh://git@github.com/1234/repo.git or
+        # ssh://git@github.com:1234/user/repo.git
+        scp_url = url.match(SCP_PATTERN)
+        return url unless Pathname.new(url).relative? && scp_url
+
+        uri = Addressable::URI.new(scheme: 'ssh', user: scp_url[:user], host: scp_url[:host], path: scp_url[:path])
+        PDK.logger.warn _('%{scp_uri} appears to be an SCP style URL; it will be converted to an RFC compliant URI: %{rfc_uri}') % {
+          scp_uri: url,
+          rfc_uri: uri.to_s,
+        }
+
+        uri.to_s
+      end
+
       # @return [Array<Hash{Symbol => Object}>] an array of hashes. Each hash
       #   contains 3 keys: :type contains a String that describes the template
       #   directory, :url contains a String with the URL to the template
@@ -130,48 +178,39 @@ module PDK
       #   the template file is not in this template directory.
       #
       def self.templates(opts)
+        require 'pdk/answer_file'
+        require 'pdk/util'
+        require 'addressable'
+
         explicit_url = opts.fetch(:'template-url', nil)
         explicit_ref = opts.fetch(:'template-ref', nil)
 
         # 1. Get the CLI, metadata (or answers if no metadata), and default URIs
         # 2. Construct the hash
         if explicit_url
-          # Valid URIs to avoid catching:
-          # - absolute local paths
-          # - have :'s in paths when preceeded by a slash
-          # - have only digits following the : and preceeding a / or end-of-string that is 0-65535
-          # The last item is ambiguous in the case of scp/git paths vs. URI port
-          # numbers, but can be made unambiguous by making the form to
-          # ssh://git@github.com/1234/repo.git or
-          # ssh://git@github.com:1234/user/repo.git
-          scp_url = explicit_url.match(SCP_PATTERN)
-          if Pathname.new(uri_safe(explicit_url)).relative? && scp_url
-            explicit_uri = Addressable::URI.new(scheme: 'ssh', user: scp_url[:user], host: scp_url[:host], path: scp_url[:path])
-            PDK.logger.warn _('%{scp_uri} appears to be an SCP style URL; it will be converted to an RFC compliant URI: %{rfc_uri}') % {
-              scp_uri: explicit_url,
-              rfc_uri: explicit_uri.to_s,
-            }
-          end
-          explicit_uri ||= Addressable::URI.parse(uri_safe(explicit_url))
-          explicit_uri.fragment = explicit_ref || default_template_ref
+          explicit_uri = Addressable::URI.parse(uri_safe(explicit_url))
+          explicit_uri.fragment = explicit_ref || default_template_ref(new(explicit_uri))
         else
           explicit_uri = nil
         end
         metadata_uri = if PDK::Util.module_root && File.file?(File.join(PDK::Util.module_root, 'metadata.json'))
-                         Addressable::URI.parse(uri_safe(PDK::Util.module_metadata['template-url']))
+                         if PDK::Util.module_metadata['template-url']
+                           new(uri_safe(PDK::Util.module_metadata['template-url'])).uri
+                         else
+                           nil
+                         end
                        else
                          nil
                        end
-        answers_uri = if PDK.answers['template-url'] == 'https://github.com/puppetlabs/pdk-module-template'
-                        # use the new github template-url if it is still the old one.
+        answers_uri = if [PACKAGED_TEMPLATE_KEYWORD, DEPRECATED_TEMPLATE_URL].include?(PDK.answers['template-url'])
                         Addressable::URI.parse(default_template_uri)
                       elsif PDK.answers['template-url']
-                        Addressable::URI.parse(uri_safe(PDK.answers['template-url']))
+                        new(uri_safe(PDK.answers['template-url'])).uri
                       else
                         nil
                       end
-        default_uri = Addressable::URI.parse(default_template_uri)
-        default_uri.fragment = default_template_ref
+        default_uri = default_template_uri.uri
+        default_uri.fragment = default_template_ref(default_template_uri)
 
         ary = []
         ary << { type: _('--template-url'), uri: explicit_uri, allow_fallback: false } if explicit_url
@@ -182,12 +221,15 @@ module PDK
       end
 
       # @returns String
-      def self.default_template_ref
-        if PDK::Util.development_mode?
-          'master'
-        else
-          PDK::TEMPLATE_REF
-        end
+      def self.default_template_ref(uri = nil)
+        require 'pdk/util'
+        require 'pdk/version'
+
+        return 'master' if PDK::Util.development_mode?
+        return PDK::TEMPLATE_REF if uri.nil?
+
+        uri = new(uri) unless uri.is_a?(self)
+        uri.default? ? PDK::TEMPLATE_REF : 'master'
       end
 
       # @returns Addressable::URI
@@ -203,6 +245,10 @@ module PDK
       end
 
       def self.valid_template?(template)
+        require 'addressable'
+        require 'pdk/util/git'
+        require 'pdk/module/templatedir'
+
         return false if template.nil? || !template.is_a?(Hash)
         return false if template[:uri].nil? || !template[:uri].is_a?(Addressable::URI)
 
@@ -225,6 +271,10 @@ module PDK
         end
 
         false
+      end
+
+      def self.packaged_template?(path)
+        path == PACKAGED_TEMPLATE_KEYWORD || LEGACY_PACKAGED_TEMPLATE_PATHS.value?(path)
       end
     end
   end

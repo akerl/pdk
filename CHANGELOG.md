@@ -4,6 +4,160 @@ All changes to this repo will be documented in this file.
 See the [release notes](https://puppet.com/docs/pdk/latest/release_notes.html) for a high-level summary.
 
 
+## [v1.14.0](https://github.com/puppetlabs/pdk/tree/v1.14.0) (2019-10-09)
+[Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.13.0...v1.14.0)
+
+**Implemented enhancements:**
+
+- Add new "pdk console" command [\#758](https://github.com/puppetlabs/pdk/pull/758) ([logicminds](https://github.com/logicminds))
+- \(PDK-1495\) Update pdk new test UX [\#749](https://github.com/puppetlabs/pdk/pull/749) ([rodjek](https://github.com/rodjek))
+- \(PDK-680\) Make `pdk test unit` interactive by default [\#748](https://github.com/puppetlabs/pdk/pull/748) ([rodjek](https://github.com/rodjek))
+- \(PDK-1047\) Add --add-tests to pdk convert [\#746](https://github.com/puppetlabs/pdk/pull/746) ([rodjek](https://github.com/rodjek))
+
+**Merged pull requests:**
+
+- \(fixup\) Fix Bundle CLI lazy load [\#767](https://github.com/puppetlabs/pdk/pull/767) ([glennsarti](https://github.com/glennsarti))
+- \(fixup\) Missing require from lazy load PR [\#766](https://github.com/puppetlabs/pdk/pull/766) ([rodjek](https://github.com/rodjek))
+- \(maint\) Loosen tests for puppet-dev [\#765](https://github.com/puppetlabs/pdk/pull/765) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-680\) Update package tests for interactive `pdk test unit` [\#756](https://github.com/puppetlabs/pdk/pull/756) ([rodjek](https://github.com/rodjek))
+- \(maint\) - Add new utility method for fixtures dir [\#755](https://github.com/puppetlabs/pdk/pull/755) ([logicminds](https://github.com/logicminds))
+- \(maint\) Lazy load dependencies [\#754](https://github.com/puppetlabs/pdk/pull/754) ([rodjek](https://github.com/rodjek))
+- \(maint\) - Allow no output when reading puppet\_from\_opts [\#753](https://github.com/puppetlabs/pdk/pull/753) ([logicminds](https://github.com/logicminds))
+- \(maint\) Refactors method to use block assignment [\#752](https://github.com/puppetlabs/pdk/pull/752) ([logicminds](https://github.com/logicminds))
+- \(maint\) Add CODEOWNERS file [\#751](https://github.com/puppetlabs/pdk/pull/751) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1367\) Deprecation warning for Puppet \< 5.0.0 [\#747](https://github.com/puppetlabs/pdk/pull/747) ([rodjek](https://github.com/rodjek))
+- \(PDK-1112\) Create json schema to validate pdk config file [\#742](https://github.com/puppetlabs/pdk/pull/742) ([glennsarti](https://github.com/glennsarti))
+- \(MAINT\) Bump version to 1.14.0.pre [\#741](https://github.com/puppetlabs/pdk/pull/741) ([scotje](https://github.com/scotje))
+
+## [v1.13.0](https://github.com/puppetlabs/pdk/tree/v1.13.0) (2019-08-29)
+[Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.12.0...v1.13.0)
+
+**Implemented enhancements:**
+
+- Don't buffer output from bundle commands [\#364](https://github.com/puppetlabs/pdk/issues/364)
+- Provide official docker image with pdk [\#336](https://github.com/puppetlabs/pdk/issues/336)
+- \(PDK-1175\) pdk new unit\_test [\#735](https://github.com/puppetlabs/pdk/pull/735) ([rodjek](https://github.com/rodjek))
+- \(PDK-871\) Relax dependencies on tty-\* gems [\#730](https://github.com/puppetlabs/pdk/pull/730) ([rodjek](https://github.com/rodjek))
+- \(PDK-1363\) Apply init templates during module convert [\#729](https://github.com/puppetlabs/pdk/pull/729) ([rodjek](https://github.com/rodjek))
+- \(PDK-1107\) Add pdk config get CLI command [\#715](https://github.com/puppetlabs/pdk/pull/715) ([glennsarti](https://github.com/glennsarti))
+
+**Fixed bugs:**
+
+- Problem running "pdk validate manifests/" with pdk 1.12.0 [\#722](https://github.com/puppetlabs/pdk/issues/722)
+- Windows MSI installer fails with PDK 1.12.0 [\#721](https://github.com/puppetlabs/pdk/issues/721)
+- Handle deleted template files for new module [\#725](https://github.com/puppetlabs/pdk/pull/725) ([seanmil](https://github.com/seanmil))
+- \(GH-722\) Do not emit nil targets for validators against a directory [\#724](https://github.com/puppetlabs/pdk/pull/724) ([glennsarti](https://github.com/glennsarti))
+- \(maint\) avoid interfering with local ruby configs [\#86](https://github.com/puppetlabs/pdk/pull/86) ([DavidS](https://github.com/DavidS))
+
+**Merged pull requests:**
+
+- \(FIXUP\) Remove nokogiri version pin from package-testing [\#738](https://github.com/puppetlabs/pdk/pull/738) ([scotje](https://github.com/scotje))
+- \(PDK-1464\) Update nokogiri due to CVE-2019-5477 [\#733](https://github.com/puppetlabs/pdk/pull/733) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1465\) Remove net-ssh from gemspec [\#732](https://github.com/puppetlabs/pdk/pull/732) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1384\) Updates to be compatible with latest Cri [\#731](https://github.com/puppetlabs/pdk/pull/731) ([scotje](https://github.com/scotje))
+- \(docs\) minor fixups to README [\#727](https://github.com/puppetlabs/pdk/pull/727) ([jbondpdx](https://github.com/jbondpdx))
+- \(PDK-1107\) Config fetch and \[\] should have no side effects [\#726](https://github.com/puppetlabs/pdk/pull/726) ([glennsarti](https://github.com/glennsarti))
+- \(MAINT\) Bump version to 1.13.0.pre [\#720](https://github.com/puppetlabs/pdk/pull/720) ([scotje](https://github.com/scotje))
+- \(MAINT\) Allow use of RSPEC\_PATTERN env var when running package tests [\#719](https://github.com/puppetlabs/pdk/pull/719) ([scotje](https://github.com/scotje))
+- \(maint\) Remove Hipchat notifications [\#716](https://github.com/puppetlabs/pdk/pull/716) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1432\) Autogenerate PowerShell modules from code [\#701](https://github.com/puppetlabs/pdk/pull/701) ([glennsarti](https://github.com/glennsarti))
+
+## [v1.12.0](https://github.com/puppetlabs/pdk/tree/v1.12.0) (2019-07-31)
+[Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.11.1...v1.12.0)
+
+**Implemented enhancements:**
+
+- \(PDK-421\) Validate EPP syntax [\#680](https://github.com/puppetlabs/pdk/pull/680) ([raphink](https://github.com/raphink))
+- \(FM-8081\) pdk new transport [\#666](https://github.com/puppetlabs/pdk/pull/666) ([DavidS](https://github.com/DavidS))
+
+**Fixed bugs:**
+
+- Checking Ruby code style fails [\#697](https://github.com/puppetlabs/pdk/issues/697)
+- template-url does not properly match ssh URI [\#653](https://github.com/puppetlabs/pdk/issues/653)
+- pdk build should fix file + directory rights for tar file [\#618](https://github.com/puppetlabs/pdk/issues/618)
+
+**Merged pull requests:**
+
+- \(FIXUP\) Bypass shell invocation for PDK::CLI::Exec::InteractiveCommand [\#717](https://github.com/puppetlabs/pdk/pull/717) ([scotje](https://github.com/scotje))
+- \(maint\) Expect pdk test unit to run more than 1 test [\#714](https://github.com/puppetlabs/pdk/pull/714) ([rodjek](https://github.com/rodjek))
+- \(PDK-1309\) Ensure file modes in built modules are sane [\#713](https://github.com/puppetlabs/pdk/pull/713) ([rodjek](https://github.com/rodjek))
+- \(PDK-641\) Make `pdk bundle` fully interactive [\#712](https://github.com/puppetlabs/pdk/pull/712) ([scotje](https://github.com/scotje))
+- \(PDK-1366\) Update default operatingsystem versions [\#711](https://github.com/puppetlabs/pdk/pull/711) ([rodjek](https://github.com/rodjek))
+- \(PDK-421\) Update acceptance tests for EPP Validation [\#709](https://github.com/puppetlabs/pdk/pull/709) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1434\) Gracefully handle unparsable bolt analytics config [\#705](https://github.com/puppetlabs/pdk/pull/705) ([rodjek](https://github.com/rodjek))
+- \(MAINT\) Add debug logging of yaml files being validated [\#704](https://github.com/puppetlabs/pdk/pull/704) ([npwalker](https://github.com/npwalker))
+- \(maint\) Fix typo in gitignore [\#700](https://github.com/puppetlabs/pdk/pull/700) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1333\) Fix command\_spec rake task for newer CRI versions [\#699](https://github.com/puppetlabs/pdk/pull/699) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1429\) Bump version to 1.11.2.pre [\#698](https://github.com/puppetlabs/pdk/pull/698) ([scotje](https://github.com/scotje))
+- \(FM-8081\) pdk new transport [\#696](https://github.com/puppetlabs/pdk/pull/696) ([DavidS](https://github.com/DavidS))
+- \(maint\) Update beaker in package tests [\#695](https://github.com/puppetlabs/pdk/pull/695) ([rodjek](https://github.com/rodjek))
+- Revert "Merge pull request \#666 from DavidS/fm-8081-pdk-new-transport" [\#693](https://github.com/puppetlabs/pdk/pull/693) ([DavidS](https://github.com/DavidS))
+- \(maint\) Message and string fixes [\#676](https://github.com/puppetlabs/pdk/pull/676) ([DavidS](https://github.com/DavidS))
+- \(PDK-1333\) command\_spec rake task [\#644](https://github.com/puppetlabs/pdk/pull/644) ([rodjek](https://github.com/rodjek))
+
+## [v1.11.1](https://github.com/puppetlabs/pdk/tree/v1.11.1) (2019-07-01)
+[Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.11.0...v1.11.1)
+
+**Closed issues:**
+
+- PDK explicitly asking for consent to collect anonymous usage information [\#690](https://github.com/puppetlabs/pdk/issues/690)
+
+**Merged pull requests:**
+
+- \(PDK-1423\) Release 1.11.1 [\#692](https://github.com/puppetlabs/pdk/pull/692) ([rodjek](https://github.com/rodjek))
+- \(PDK-1415\) Allow analytics opt-out prompt to be disabled via ENV [\#691](https://github.com/puppetlabs/pdk/pull/691) ([scotje](https://github.com/scotje))
+- \(PDK-1414\) Detect common CI environments and set non-interactive [\#689](https://github.com/puppetlabs/pdk/pull/689) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1409\) Bump PDK version to 1.11.1.pre [\#688](https://github.com/puppetlabs/pdk/pull/688) ([rodjek](https://github.com/rodjek))
+
+## [v1.11.0](https://github.com/puppetlabs/pdk/tree/v1.11.0) (2019-06-27)
+[Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.10.0...v1.11.0)
+
+**Fixed bugs:**
+
+- \(PDK-1348\) remove unused constants throwing warns [\#656](https://github.com/puppetlabs/pdk/pull/656) ([tphoney](https://github.com/tphoney))
+
+**Closed issues:**
+
+- template-ref behaviour in PDK 1.10.0 breaks backwards compatibility [\#661](https://github.com/puppetlabs/pdk/issues/661)
+- pdk validate reports error on is\_to\_s [\#642](https://github.com/puppetlabs/pdk/issues/642)
+- pdk 1.9.1.0 on windows does not set path env variable [\#641](https://github.com/puppetlabs/pdk/issues/641)
+- default\_facts.yml does not override values from facterdb [\#628](https://github.com/puppetlabs/pdk/issues/628)
+- PDK and beaker [\#622](https://github.com/puppetlabs/pdk/issues/622)
+- Configure 'ordering' for rspec-puppet in PDK [\#511](https://github.com/puppetlabs/pdk/issues/511)
+- Cannot override module Hiera 5 config for unit tests [\#487](https://github.com/puppetlabs/pdk/issues/487)
+
+**Merged pull requests:**
+
+- \(PDK-1403\) Release 1.11.0 [\#687](https://github.com/puppetlabs/pdk/pull/687) ([rodjek](https://github.com/rodjek))
+- \(FIXUP\) Avoid attempting to append nokogiri pin to nil in package tests [\#686](https://github.com/puppetlabs/pdk/pull/686) ([scotje](https://github.com/scotje))
+- Revert "\(PDK-1366\) Update default operatingsystem versions" [\#685](https://github.com/puppetlabs/pdk/pull/685) ([rodjek](https://github.com/rodjek))
+- \(maint\) Clear Gemfile overrides before pdk update test [\#684](https://github.com/puppetlabs/pdk/pull/684) ([rodjek](https://github.com/rodjek))
+- \(PDK-1366\) Update default operatingsystem versions [\#682](https://github.com/puppetlabs/pdk/pull/682) ([rodjek](https://github.com/rodjek))
+- \(PDK-1362\) Warn user if updating module with older PDK version [\#681](https://github.com/puppetlabs/pdk/pull/681) ([rodjek](https://github.com/rodjek))
+- \(PDK-1365\) Use dynamic ruby detection for default ruby instance [\#678](https://github.com/puppetlabs/pdk/pull/678) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1354\) Default template ref for custom templates should always be master [\#677](https://github.com/puppetlabs/pdk/pull/677) ([rodjek](https://github.com/rodjek))
+- \(maint\) Pin cri to \<= 2.15.6 [\#675](https://github.com/puppetlabs/pdk/pull/675) ([rodjek](https://github.com/rodjek))
+- \(MAINT\) Fix issues related to Cri behavior change with options hash [\#672](https://github.com/puppetlabs/pdk/pull/672) ([scotje](https://github.com/scotje))
+- \(PDK-1337\) Warn and unset any of the legacy \*\_GEM\_VERSION env vars [\#671](https://github.com/puppetlabs/pdk/pull/671) ([rodjek](https://github.com/rodjek))
+- \(PDK-1345\) Disable analytics during package tests [\#670](https://github.com/puppetlabs/pdk/pull/670) ([rodjek](https://github.com/rodjek))
+- \(MAINT\) Fix MSYS2 update on Appveyor [\#669](https://github.com/puppetlabs/pdk/pull/669) ([rodjek](https://github.com/rodjek))
+- \(PDK-1342\) Submit PDK analytics events [\#668](https://github.com/puppetlabs/pdk/pull/668) ([rodjek](https://github.com/rodjek))
+- \(PDK-1336\) Update rubocop to 0.57.2 [\#667](https://github.com/puppetlabs/pdk/pull/667) ([scotje](https://github.com/scotje))
+- \(PDK-1341\) Hook up PDK analytics to Google Analytics [\#665](https://github.com/puppetlabs/pdk/pull/665) ([rodjek](https://github.com/rodjek))
+- \(MAINT\) Add "needs-triage" default labels to issue templates [\#664](https://github.com/puppetlabs/pdk/pull/664) ([scotje](https://github.com/scotje))
+- \(PDK-1264\) Display a nicer error when tarring long paths [\#663](https://github.com/puppetlabs/pdk/pull/663) ([rodjek](https://github.com/rodjek))
+- \(maint\) Add spawned process stdout & stderr to debug log [\#662](https://github.com/puppetlabs/pdk/pull/662) ([rodjek](https://github.com/rodjek))
+- \(PDK-1300\) Ensure `test unit --list` uses correct Puppet/Ruby env [\#660](https://github.com/puppetlabs/pdk/pull/660) ([scotje](https://github.com/scotje))
+- \(MAINT\) Fixup package acceptance tests for 'pdk-default' template URL [\#658](https://github.com/puppetlabs/pdk/pull/658) ([scotje](https://github.com/scotje))
+- \(PDK-1339\) Read or interview for analytics config [\#657](https://github.com/puppetlabs/pdk/pull/657) ([rodjek](https://github.com/rodjek))
+- \(PDK-1350\) Handle SCP style URLs in metadata.json [\#655](https://github.com/puppetlabs/pdk/pull/655) ([rodjek](https://github.com/rodjek))
+- \(PDK-1338\) Initial import of analytics code from Bolt [\#652](https://github.com/puppetlabs/pdk/pull/652) ([rodjek](https://github.com/rodjek))
+- \(MAINT\) Bump version to 1.11.0.pre [\#651](https://github.com/puppetlabs/pdk/pull/651) ([scotje](https://github.com/scotje))
+- \(PDK-1335\) Add development note when on Windows [\#649](https://github.com/puppetlabs/pdk/pull/649) ([glennsarti](https://github.com/glennsarti))
+- \(maint\) Allow developers to add additional gems [\#648](https://github.com/puppetlabs/pdk/pull/648) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1167\) Validator should honor case sensitive of the file system [\#646](https://github.com/puppetlabs/pdk/pull/646) ([glennsarti](https://github.com/glennsarti))
+- \(PDK-1193\) Saves packaged template-url in metadata as a keyword [\#639](https://github.com/puppetlabs/pdk/pull/639) ([bmjen](https://github.com/bmjen))
+
 ## [v1.10.0](https://github.com/puppetlabs/pdk/tree/v1.10.0) (2019-04-02)
 [Full Changelog](https://github.com/puppetlabs/pdk/compare/v1.9.1...v1.10.0)
 
@@ -22,6 +176,7 @@ See the [release notes](https://puppet.com/docs/pdk/latest/release_notes.html) f
 
 **Merged pull requests:**
 
+- \(PDK-1324\) Release 1.10.0 [\#650](https://github.com/puppetlabs/pdk/pull/650) ([rodjek](https://github.com/rodjek))
 - \(maint\) Fix package specs for template-ref changes [\#647](https://github.com/puppetlabs/pdk/pull/647) ([rodjek](https://github.com/rodjek))
 - \(maint\) Enforce LF line endings in Rubocop [\#645](https://github.com/puppetlabs/pdk/pull/645) ([glennsarti](https://github.com/glennsarti))
 - \(FM-7579, PDK-1236\) bump the version of CRI used [\#638](https://github.com/puppetlabs/pdk/pull/638) ([tphoney](https://github.com/tphoney))

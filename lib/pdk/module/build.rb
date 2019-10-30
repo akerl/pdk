@@ -1,11 +1,3 @@
-require 'fileutils'
-require 'minitar'
-require 'zlib'
-require 'pathspec'
-require 'find'
-require 'pdk/module'
-require 'pdk/tests/unit'
-
 module PDK
   module Module
     class Build
@@ -26,6 +18,8 @@ module PDK
       #
       # @return [Hash{String => Object}] The hash of metadata values.
       def metadata
+        require 'pdk/module/metadata'
+
         @metadata ||= PDK::Module::Metadata.from_file(File.join(module_dir, 'metadata.json')).data
       end
 
@@ -71,6 +65,8 @@ module PDK
       #
       # If the directory already exists, remove it first.
       def create_build_dir
+        require 'fileutils'
+
         cleanup_build_dir
 
         FileUtils.mkdir_p(build_dir)
@@ -80,6 +76,8 @@ module PDK
       #
       # @return nil.
       def cleanup_build_dir
+        require 'fileutils'
+
         FileUtils.rm_rf(build_dir, secure: true)
       end
 
@@ -99,6 +97,8 @@ module PDK
       #
       # @return nil
       def stage_module_in_build_dir
+        require 'find'
+
         Find.find(module_dir) do |path|
           next if path == module_dir
 
@@ -112,6 +112,9 @@ module PDK
       #
       # @return nil.
       def stage_path(path)
+        require 'pathname'
+        require 'fileutils'
+
         relative_path = Pathname.new(path).relative_path_from(Pathname.new(module_dir))
         dest_path = File.join(build_dir, relative_path)
 
@@ -120,8 +123,14 @@ module PDK
         elsif File.symlink?(path)
           warn_symlink(path)
         else
+          validate_ustar_path!(relative_path.to_path)
           FileUtils.cp(path, dest_path, preserve: true)
         end
+      rescue ArgumentError => e
+        raise PDK::CLI::ExitWithError, _(
+          '%{message} Rename the file or exclude it from the package ' \
+          'by adding it to the .pdkignore file in your module.',
+        ) % { message: e.message }
       end
 
       # Check if the given path matches one of the patterns listed in the
@@ -143,6 +152,8 @@ module PDK
       #
       # @return nil.
       def warn_symlink(path)
+        require 'pathname'
+
         symlink_path = Pathname.new(path)
         module_path = Pathname.new(module_dir)
 
@@ -152,6 +163,58 @@ module PDK
         }
       end
 
+      # Checks if the path length will fit into the POSIX.1-1998 (ustar) tar
+      # header format.
+      #
+      # POSIX.1-2001 (which allows paths of infinite length) was adopted by GNU
+      # tar in 2004 and is supported by minitar 0.7 and above. Unfortunately
+      # much of the Puppet ecosystem still uses minitar 0.6.1.
+      #
+      # POSIX.1-1998 tar format does not allow for paths greater than 256 bytes,
+      # or paths that can't be split into a prefix of 155 bytes (max) and
+      # a suffix of 100 bytes (max).
+      #
+      # This logic was pretty much copied from the private method
+      # {Archive::Tar::Minitar::Writer#split_name}.
+      #
+      # @param path [String] the relative path to be added to the tar file.
+      #
+      # @raise [ArgumentError] if the path is too long or could not be split.
+      #
+      # @return [nil]
+      def validate_ustar_path!(path)
+        if path.bytesize > 256
+          raise ArgumentError, _("The path '%{path}' is longer than 256 bytes.") % {
+            path: path,
+          }
+        end
+
+        if path.bytesize <= 100
+          prefix = ''
+        else
+          parts = path.split(File::SEPARATOR)
+          newpath = parts.pop
+          nxt = ''
+
+          loop do
+            nxt = parts.pop || ''
+            break if newpath.bytesize + 1 + nxt.bytesize >= 100
+            newpath = File.join(nxt, newpath)
+          end
+
+          prefix = File.join(*parts, nxt)
+          path = newpath
+        end
+
+        return unless path.bytesize > 100 || prefix.bytesize > 155
+
+        raise ArgumentError, _(
+          "'%{path}' could not be split at a directory separator into two " \
+          'parts, the first having a maximum length of 155 bytes and the ' \
+          'second having a maximum length of 100 bytes.',
+        ) % { path: path }
+      end
+
       # Creates a gzip compressed tarball of the build directory.
       #
       # If the destination package already exists, it will be removed before
@@ -159,11 +222,38 @@ module PDK
       #
       # @return nil.
       def build_package
+        require 'fileutils'
+        require 'zlib'
+        require 'minitar'
+        require 'find'
+
         FileUtils.rm_f(package_file)
 
         Dir.chdir(target_dir) do
-          Zlib::GzipWriter.open(package_file) do |package_fd|
-            Minitar.pack(release_name, package_fd)
+          begin
+            gz = Zlib::GzipWriter.new(File.open(package_file, 'wb'))
+            tar = Minitar::Output.new(gz)
+            Find.find(release_name) do |entry|
+              entry_meta = {
+                name: entry,
+              }
+
+              orig_mode = File.stat(entry).mode
+              min_mode = Minitar.dir?(entry) ? 0o755 : 0o644
+
+              entry_meta[:mode] = orig_mode | min_mode
+
+              if entry_meta[:mode] != orig_mode
+                PDK.logger.debug(_('Updated permissions of packaged \'%{entry}\' to %{new_mode}') % {
+                  entry: entry,
+                  new_mode: (entry_meta[:mode] & 0o7777).to_s(8),
+                })
+              end
+
+              Minitar.pack_file(entry_meta, tar)
+            end
+          ensure
+            tar.close
           end
         end
       end
@@ -188,6 +278,9 @@ module PDK
       #
       # @return [PathSpec] The populated ignore path matcher.
       def ignored_files
+        require 'pdk/module'
+        require 'pathspec'
+
         @ignored_files ||=
           begin
             ignored = if ignore_file.nil?

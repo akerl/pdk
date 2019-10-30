@@ -274,6 +274,59 @@ describe PDK::Util do
     end
   end
 
+  describe '.configdir' do
+    subject { described_class.configdir }
+
+    context 'when running on Windows' do
+      before(:each) do
+        allow(Gem).to receive(:win_platform?).and_return(true)
+        allow(ENV).to receive(:[]).with('LOCALAPPDATA').and_return('C:/Users/test')
+      end
+
+      it 'returns a path in the %LOCALAPPDATA% folder' do
+        is_expected.to eq(File.join('C:/Users/test', 'PDK'))
+      end
+    end
+
+    context 'when running on a POSIX host' do
+      before(:each) do
+        allow(Gem).to receive(:win_platform?).and_return(false)
+        allow(Dir).to receive(:home).and_return('/home/test')
+      end
+
+      it 'returns a path inside the users .config directory' do
+        is_expected.to eq(File.join('/home/test', '.config', 'pdk'))
+      end
+    end
+  end
+
+  describe '.module_fixtures_dir' do
+    subject { described_class.module_fixtures_dir }
+
+    before(:each) do
+      allow(described_class).to receive(:find_upwards).with('metadata.json').and_return(metadata_path)
+      allow(described_class).to receive(:in_module_root?).and_return(in_module_root)
+    end
+
+    context 'inside a module' do
+      let(:metadata_path) { '/path/to/the/module/metadata.json' }
+      let(:in_module_root) { true }
+
+      it 'valid fixtures dir' do
+        is_expected.to eq(File.join(File.dirname(metadata_path), 'spec', 'fixtures'))
+      end
+    end
+
+    context 'outside a module' do
+      let(:metadata_path) { nil }
+      let(:in_module_root) { false }
+
+      it 'invalid fixtures dir' do
+        is_expected.to be_nil
+      end
+    end
+  end
+
   describe '.module_root' do
     subject { described_class.module_root }
 

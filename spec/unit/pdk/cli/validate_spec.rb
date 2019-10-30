@@ -25,9 +25,21 @@ describe 'Running `pdk validate` in a module' do
 
   context 'when no arguments or options are provided' do
     it 'invokes each validator with no report and no options and exits zero' do
-      expect(validators).to all(receive(:invoke).with(report, puppet: puppet_version).and_return(0))
+      expect(validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0))
 
       expect(logger).to receive(:info).with('Running all available validators...')
+
+      expect { PDK::CLI.run(['validate']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      validators.each { |v| allow(v).to receive(:invoke).with(any_args).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate']) }.to exit_zero
     end
@@ -46,6 +58,19 @@ describe 'Running `pdk validate` in a module' do
 
         expect { PDK::CLI.run(['validate', '--parallel']) }.to exit_zero
       end
+
+      it 'submits the command to analytics' do
+        validators.each { |v| allow(v).to receive(:invoke).with(any_args).and_return(0) }
+
+        expect(analytics).to receive(:screen_view).with(
+          'validate',
+          cli_options:   'parallel=true',
+          output_format: 'default',
+          ruby_version:  RUBY_VERSION,
+        )
+
+        expect { PDK::CLI.run(['validate', '--parallel']) }.to exit_zero
+      end
     end
   end
 
@@ -55,17 +80,40 @@ describe 'Running `pdk validate` in a module' do
 
       expect { PDK::CLI.run(['validate', '--list']) }.to exit_zero
     end
+
+    it 'submits the command to analytics' do
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        cli_options:   'list=true',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
+
+      expect { PDK::CLI.run(['validate', '--list']) }.to exit_zero
+    end
   end
 
   context 'when a single validator is provided as an argument' do
     let(:validator) { PDK::Validate::MetadataValidator }
 
     it 'only invokes the given validator and exits zero' do
-      expect(validator).to receive(:invoke).with(report, puppet: puppet_version).and_return(0)
+      expect(validator).to receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0)
 
       validators.reject { |r| r == validator }.each do |v|
         expect(v).not_to receive(:invoke)
       end
+
+      expect { PDK::CLI.run(%w[validate metadata]) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      allow(validator).to receive(:invoke).and_return(0)
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate_metadata',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(%w[validate metadata]) }.to exit_zero
     end
@@ -80,11 +128,23 @@ describe 'Running `pdk validate` in a module' do
     end
 
     it 'invokes each given validator and exits zero' do
-      expect(invoked_validators).to all(receive(:invoke).with(report, puppet: puppet_version).and_return(0))
+      expect(invoked_validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0))
 
       (validators | invoked_validators).each do |validator|
         expect(validator).not_to receive(:invoke)
       end
+
+      expect { PDK::CLI.run(['validate', 'puppet,metadata']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      invoked_validators.each { |v| allow(v).to receive(:invoke).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate_metadata_puppet',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate', 'puppet,metadata']) }.to exit_zero
     end
@@ -95,7 +155,19 @@ describe 'Running `pdk validate` in a module' do
 
     it 'warns about unknown validators, invokes known validators, and exits zero' do
       expect(logger).to receive(:warn).with(%r{Unknown validator 'bad-val'. Available validators: #{validator_names}}i)
-      expect(validator).to receive(:invoke).with(report, puppet: puppet_version).and_return(0)
+      expect(validator).to receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0)
+
+      expect { PDK::CLI.run(['validate', 'puppet,bad-val']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      allow(validator).to receive(:invoke).and_return(0)
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate_puppet',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate', 'puppet,bad-val']) }.to exit_zero
     end
@@ -105,7 +177,19 @@ describe 'Running `pdk validate` in a module' do
     let(:validator) { PDK::Validate::MetadataValidator }
 
     it 'invokes the specified validator with the target as an option' do
-      expect(validator).to receive(:invoke).with(report, puppet: puppet_version, targets: ['lib/', 'manifests/']).and_return(0)
+      expect(validator).to receive(:invoke).with(report, hash_including(puppet: puppet_version, targets: ['lib/', 'manifests/'])).and_return(0)
+
+      expect { PDK::CLI.run(['validate', 'metadata', 'lib/', 'manifests/']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      allow(validator).to receive(:invoke).and_return(0)
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate_metadata',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate', 'metadata', 'lib/', 'manifests/']) }.to exit_zero
     end
@@ -113,9 +197,21 @@ describe 'Running `pdk validate` in a module' do
 
   context 'when targets are provided as arguments and no validators are specified' do
     it 'invokes all validators with the target as an option' do
-      expect(validators).to all(receive(:invoke).with(report, puppet: puppet_version, targets: ['lib/', 'manifests/']).and_return(0))
+      expect(validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version, targets: ['lib/', 'manifests/'])).and_return(0))
 
       expect(logger).to receive(:info).with('Running all available validators...')
+
+      expect { PDK::CLI.run(['validate', 'lib/', 'manifests/']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      validators.each { |v| allow(v).to receive(:invoke).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate', 'lib/', 'manifests/']) }.to exit_zero
     end
@@ -123,9 +219,21 @@ describe 'Running `pdk validate` in a module' do
 
   context 'when no report formats are specified' do
     it 'reports to stdout as text' do
-      expect(validators).to all(receive(:invoke).with(report, puppet: puppet_version).and_return(0))
+      expect(validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0))
       expect(report).to receive(:write_text).with($stdout)
       expect(report).not_to receive(:write_junit)
+
+      expect { PDK::CLI.run(['validate']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      validators.each { |v| allow(v).to receive(:invoke).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate']) }.to exit_zero
     end
@@ -133,9 +241,21 @@ describe 'Running `pdk validate` in a module' do
 
   context 'when a report format is specified' do
     it 'reports to stdout as the specified format' do
-      expect(validators).to all(receive(:invoke).with(report, puppet: puppet_version).and_return(0))
+      expect(validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0))
       expect(report).to receive(:write_junit).with($stdout)
       expect(report).not_to receive(:write_text)
+
+      expect { PDK::CLI.run(['validate', '--format', 'junit']) }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      validators.each { |v| allow(v).to receive(:invoke).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        output_format: 'junit',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect { PDK::CLI.run(['validate', '--format', 'junit']) }.to exit_zero
     end
@@ -143,10 +263,24 @@ describe 'Running `pdk validate` in a module' do
 
   context 'when multiple report formats are specified' do
     it 'reports to each target as the specified format' do
-      expect(validators).to all(receive(:invoke).with(report, puppet: puppet_version).and_return(0))
+      expect(validators).to all(receive(:invoke).with(report, hash_including(puppet: puppet_version)).and_return(0))
       expect(report).to receive(:write_text).with($stderr)
       expect(report).to receive(:write_text).with($stdout)
       expect(report).to receive(:write_junit).with('testfile.xml')
+
+      expect {
+        PDK::CLI.run(%w[validate --format text:stderr --format junit:testfile.xml --format text])
+      }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      validators.each { |v| allow(v).to receive(:invoke).and_return(0) }
+
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        output_format: 'junit,text',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect {
         PDK::CLI.run(%w[validate --format text:stderr --format junit:testfile.xml --format text])
@@ -183,11 +317,30 @@ describe 'Running `pdk validate` in a module' do
         PDK::CLI.run(['validate', '--puppet-dev'])
       }.to exit_zero
     end
+
+    it 'submits the command to analytics' do
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        cli_options:   'puppet-dev=true',
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
+
+      expect { PDK::CLI.run(['validate', '--puppet-dev']) }.to exit_zero
+    end
   end
 
   context 'with both --puppet-version and --puppet-dev' do
     it 'exits with an error' do
       expect(logger).to receive(:error).with(a_string_matching(%r{cannot specify.*--puppet-dev.*and.*--puppet-version}i))
+
+      expect {
+        PDK::CLI.run(%w[validate --puppet-version 4.10.10 --puppet-dev])
+      }.to exit_nonzero
+    end
+
+    it 'does not submit the command to analytics' do
+      expect(analytics).not_to receive(:screen_view)
 
       expect {
         PDK::CLI.run(%w[validate --puppet-version 4.10.10 --puppet-dev])
@@ -203,11 +356,27 @@ describe 'Running `pdk validate` in a module' do
         PDK::CLI.run(%w[validate --pe-version 2018.1 --puppet-dev])
       }.to exit_nonzero
     end
+
+    it 'does not submit the command to analytics' do
+      expect(analytics).not_to receive(:screen_view)
+
+      expect {
+        PDK::CLI.run(%w[validate --pe-version 2018.1 --puppet-dev])
+      }.to exit_nonzero
+    end
   end
 
   context 'with both --puppet-version and --pe-version' do
     it 'exits with an error' do
       expect(logger).to receive(:error).with(a_string_matching(%r{cannot specify.*--pe-version.*and.*--puppet-version}i))
+
+      expect {
+        PDK::CLI.run(%w[validate --puppet-version 4.10.10 --pe-version 2018.1.1])
+      }.to exit_nonzero
+    end
+
+    it 'does not submit the command to analytics' do
+      expect(analytics).not_to receive(:screen_view)
 
       expect {
         PDK::CLI.run(%w[validate --puppet-version 4.10.10 --pe-version 2018.1.1])
@@ -244,6 +413,19 @@ describe 'Running `pdk validate` in a module' do
         PDK::CLI.run(['validate', "--puppet-version=#{puppet_version}"])
       }.to exit_zero
     end
+
+    it 'submits the command to analytics' do
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        cli_options:   "puppet-version=#{puppet_version}",
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
+
+      expect {
+        PDK::CLI.run(['validate', "--puppet-version=#{puppet_version}"])
+      }.to exit_zero
+    end
   end
 
   context 'with --pe-version' do
@@ -270,6 +452,19 @@ describe 'Running `pdk validate` in a module' do
 
     it 'activates resolved ruby version' do
       expect(PDK::Util::RubyVersion).to receive(:use).with(puppet_env[:ruby_version])
+
+      expect {
+        PDK::CLI.run(['validate', "--pe-version=#{pe_version}"])
+      }.to exit_zero
+    end
+
+    it 'submits the command to analytics' do
+      expect(analytics).to receive(:screen_view).with(
+        'validate',
+        cli_options:   "pe-version=#{pe_version}",
+        output_format: 'default',
+        ruby_version:  RUBY_VERSION,
+      )
 
       expect {
         PDK::CLI.run(['validate', "--pe-version=#{pe_version}"])

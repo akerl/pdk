@@ -13,6 +13,63 @@ module PDK
         File.open(path, 'wb') { |f| f.write(content) }
       end
       module_function :write_file
+
+      def read_file(file, nil_on_error: false)
+        File.read(file)
+      rescue => e
+        raise e unless nil_on_error
+        nil
+      end
+      module_function :read_file
+
+      #:nocov:
+      # These methods just wrap core Ruby functionality and
+      # can be ignored for code coverage
+      def directory?(*args)
+        File.directory?(*args)
+      end
+      module_function :directory?
+
+      def mkdir_p(*args)
+        FileUtils.mkdir_p(*args)
+      end
+      module_function :mkdir_p
+
+      def file?(*args)
+        File.file?(*args)
+      end
+      module_function :file?
+
+      def expand_path(*args)
+        File.expand_path(*args)
+      end
+      module_function :expand_path
+
+      def glob(*args)
+        Dir.glob(*args)
+      end
+      module_function :glob
+
+      def fnmatch(*args)
+        File.fnmatch(*args)
+      end
+      module_function :fnmatch
+
+      def readable?(*args)
+        File.readable?(*args)
+      end
+      module_function :readable?
+
+      def exist?(*args)
+        File.exist?(*args)
+      end
+      module_function :exist?
+
+      def rm(*args)
+        FileUtils.rm(*args)
+      end
+      module_function :rm
+      #:nocov:
     end
   end
 end

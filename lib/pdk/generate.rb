@@ -3,9 +3,16 @@ require 'pdk/generate/module'
 require 'pdk/generate/provider'
 require 'pdk/generate/puppet_class'
 require 'pdk/generate/task'
-require 'pdk/module/metadata'
-require 'pdk/module/templatedir'
+require 'pdk/generate/transport'
 
 module PDK
-  module Generate; end
+  module Generate
+    GENERATORS = [
+      PDK::Generate::DefinedType,
+      PDK::Generate::Provider,
+      PDK::Generate::PuppetClass,
+      PDK::Generate::Task,
+      PDK::Generate::Transport,
+    ].freeze
+  end
 end

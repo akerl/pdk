@@ -1,8 +1,4 @@
-require 'pdk'
-require 'pdk/cli/exec'
 require 'pdk/validate/base_validator'
-require 'pdk/util'
-require 'pathname'
 
 module PDK
   module Validate
@@ -31,6 +27,8 @@ module PDK
         end
 
         def self.create_spinner(targets = [], options = {})
+          require 'pdk/cli/util'
+
           return unless PDK::CLI::Util.interactive?
           options = options.merge(PDK::CLI::Util.spinner_opts_for_platform)
 
@@ -38,6 +36,8 @@ module PDK
           @spinner = if exec_group
                        exec_group.add_spinner(spinner_text(targets), options)
                      else
+                       require 'pdk/cli/util/spinner'
+
                        TTY::Spinner.new("[:spinner] #{spinner_text(targets)}", options)
                      end
           @spinner.auto_spin
@@ -61,6 +61,8 @@ module PDK
 
           return_val = 0
           create_spinner(targets, options)
+
+          PDK.logger.debug(_('Validating yaml content of %{parsed_targets}') % { parsed_targets: targets.to_s })
 
           targets.each do |target|
             next unless File.file?(target)

@@ -1,11 +1,7 @@
-require 'tmpdir'
-require 'tempfile'
-
-require 'pdk/util/version'
+# PDK::Util::Windows can not be lazy loaded because it conditionally requires
+# other files on Windows only. This can probably be fixed up with a later
+# refactoring.
 require 'pdk/util/windows'
-require 'pdk/util/vendored_file'
-require 'pdk/util/filesystem'
-require 'pdk/util/template_uri'
 
 module PDK
   module Util
@@ -44,6 +40,8 @@ module PDK
     #
     # @return [String] The temporary directory path.
     def make_tmpdir_name(base)
+      require 'tmpdir'
+
       t = Time.now.strftime('%Y%m%d')
       name = "#{base}#{t}-#{Process.pid}-#{rand(0x100000000).to_s(36)}"
       File.join(Dir.tmpdir, name)
@@ -68,11 +66,15 @@ module PDK
     module_function :canonical_path
 
     def package_install?
+      require 'pdk/util/version'
+
       !PDK::Util::Version.version_file.nil?
     end
     module_function :package_install?
 
     def development_mode?
+      require 'pdk/util/version'
+
       (!PDK::Util::Version.git_ref.nil? || PDK::VERSION.end_with?('.pre'))
     end
     module_function :development_mode?
@@ -84,6 +86,7 @@ module PDK
 
     def pdk_package_basedir
       raise PDK::CLI::FatalError, _('Package basedir requested for non-package install.') unless package_install?
+      require 'pdk/util/version'
 
       File.dirname(PDK::Util::Version.version_file)
     end
@@ -106,6 +109,15 @@ module PDK
     end
     module_function :cachedir
 
+    def configdir
+      if Gem.win_platform?
+        File.join(ENV['LOCALAPPDATA'], 'PDK')
+      else
+        File.join(ENV.fetch('XDG_CONFIG_HOME', File.join(Dir.home, '.config')), 'pdk')
+      end
+    end
+    module_function :configdir
+
     # Returns path to the root of the module being worked on.
     #
     # @return [String, nil] Fully qualified base path to module, or nil if
@@ -121,6 +133,14 @@ module PDK
       end
     end
     module_function :module_root
+
+    # The module's fixtures directory for spec testing
+    # @return [String] - the path to the module's fixtures directory
+    def module_fixtures_dir
+      dir = module_root
+      File.join(module_root, 'spec', 'fixtures') unless dir.nil?
+    end
+    module_function :module_fixtures_dir
 
     # Returns true or false depending on if any of the common directories in a module
     # are found in the current directory
@@ -200,6 +220,8 @@ module PDK
 
     # TO-DO: Refactor replacement of lib/pdk/module/build.rb:metadata to use this function instead
     def module_metadata
+      require 'pdk/module/metadata'
+
       PDK::Module::Metadata.from_file(File.join(module_root, 'metadata.json')).data
     end
     module_function :module_metadata

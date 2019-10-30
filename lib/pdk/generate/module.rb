@@ -1,18 +1,4 @@
-require 'etc'
-require 'pathname'
-require 'fileutils'
-require 'tty-prompt'
-
-require 'pdk'
-require 'pdk/logger'
-require 'pdk/module/metadata'
-require 'pdk/module/templatedir'
-require 'pdk/cli/exec'
-require 'pdk/cli/util'
-require 'pdk/cli/util/interview'
-require 'pdk/cli/util/option_validator'
-require 'pdk/util'
-require 'pdk/util/version'
+require 'pdk/util/filesystem'
 
 module PDK
   module Generate
@@ -20,6 +6,8 @@ module PDK
       extend PDK::Util::Filesystem
 
       def self.validate_options(opts)
+        require 'pdk/cli/util/option_validator'
+
         unless PDK::CLI::Util::OptionValidator.valid_module_name?(opts[:module_name])
           error_msg = _(
             "'%{module_name}' is not a valid module name.\n" \
@@ -33,6 +21,12 @@ module PDK
       end
 
       def self.invoke(opts = {})
+        require 'pdk/module/templatedir'
+        require 'pdk/util'
+        require 'pdk/util/template_uri'
+        require 'fileutils'
+        require 'pathname'
+
         validate_options(opts) unless opts[:module_name].nil?
 
         metadata = prepare_metadata(opts)
@@ -58,7 +52,8 @@ module PDK
 
         begin
           PDK::Module::TemplateDir.new(template_uri, metadata.data, true) do |templates|
-            templates.render do |file_path, file_content|
+            templates.render do |file_path, file_content, file_status|
+              next if file_status == :delete
               file = Pathname.new(temp_target_dir) + file_path
               file.dirname.mkpath
               write_file(file, file_content)
@@ -75,6 +70,7 @@ module PDK
         end
 
         # Only update the answers files after metadata has been written.
+        require 'pdk/answer_file'
         if template_uri.default?
           # If the user specifies our default template url via the command
           # line, remove the saved template-url answer so that the template_uri
@@ -88,7 +84,12 @@ module PDK
 
         begin
           if FileUtils.mv(temp_target_dir, target_dir)
-            Dir.chdir(target_dir) { PDK::Util::Bundler.ensure_bundle! } unless opts[:'skip-bundle-install']
+            unless opts[:'skip-bundle-install']
+              Dir.chdir(target_dir) do
+                require 'pdk/util/bundler'
+                PDK::Util::Bundler.ensure_bundle!
+              end
+            end
 
             PDK.logger.info _('Module \'%{name}\' generated at path \'%{path}\', from template \'%{url}\'.') % { name: opts[:module_name], path: target_dir, url: template_uri.git_remote }
             PDK.logger.info(_('In your module directory, add classes with the \'pdk new class\' command.'))
@@ -103,6 +104,8 @@ module PDK
       end
 
       def self.username_from_login
+        require 'etc'
+
         login = Etc.getlogin || ''
         login_clean = login.downcase.gsub(%r{[^0-9a-z]}i, '')
         login_clean = 'username' if login_clean.empty?
@@ -117,6 +120,9 @@ module PDK
       end
 
       def self.prepare_metadata(opts = {})
+        require 'pdk/answer_file'
+        require 'pdk/module/metadata'
+
         opts[:username] = (opts[:username] || PDK.answers['forge_username'] || username_from_login).downcase
 
         defaults = PDK::Module::Metadata::DEFAULTS.dup
@@ -124,7 +130,7 @@ module PDK
         defaults['name'] = "#{opts[:username]}-#{opts[:module_name]}" unless opts[:module_name].nil?
         defaults['author'] = PDK.answers['author'] unless PDK.answers['author'].nil?
         defaults['license'] = PDK.answers['license'] unless PDK.answers['license'].nil?
-        defaults['license'] = opts[:license] if opts.key? :license
+        defaults['license'] = opts[:license] if opts.key?(:license)
 
         metadata = PDK::Module::Metadata.new(defaults)
         module_interview(metadata, opts) unless opts[:'skip-interview']
@@ -133,6 +139,8 @@ module PDK
       end
 
       def self.prepare_module_directory(target_dir)
+        require 'fileutils'
+
         [
           File.join(target_dir, 'examples'),
           File.join(target_dir, 'files'),
@@ -152,6 +160,9 @@ module PDK
       end
 
       def self.module_interview(metadata, opts = {})
+        require 'pdk/module/metadata'
+        require 'pdk/cli/util/interview'
+
         questions = [
           {
             name:             'module_name',
@@ -199,6 +210,7 @@ module PDK
             question: _('What operating systems does this module support?'),
             help:     _('Use the up and down keys to move between the choices, space to select and enter to continue.'),
             required: true,
+            type:     :multi_select,
             choices:  PDK::Module::Metadata::OPERATING_SYSTEMS,
             default:  PDK::Module::Metadata::DEFAULT_OPERATING_SYSTEMS.map do |os_name|
               # tty-prompt uses a 1-index
@@ -252,22 +264,32 @@ module PDK
         else
           questions.reject! { |q| q[:name] == 'module_name' } if opts.key?(:module_name)
           questions.reject! { |q| q[:name] == 'license' } if opts.key?(:license)
-          questions.reject! { |q| q[:forge_only] } unless opts.key?(:'full-interview')
+          questions.reject! { |q| q[:forge_only] } unless opts[:'full-interview']
         end
 
         interview.add_questions(questions)
 
-        action = File.file?('metadata.json') ? _('update') : _('create')
+        if File.file?('metadata.json')
+          puts _(
+            "\nWe need to update the metadata.json file for this module, so we\'re going to ask you %{count} " \
+            "questions.\n",
+          ) % {
+            count: interview.num_questions,
+          }
+        else
+          puts _(
+            "\nWe need to create the metadata.json file for this module, so we\'re going to ask you %{count} " \
+            "questions.\n",
+          ) % {
+            count: interview.num_questions,
+          }
+        end
+
         puts _(
-          "\nWe need to %{action} the metadata.json file for this module, so we\'re going to ask you %{count} " \
-          "questions.\n" \
           'If the question is not applicable to this module, accept the default option ' \
           'shown after each question. You can modify any answers at any time by manually updating ' \
           "the metadata.json file.\n\n",
-        ) % {
-          count: interview.num_questions,
-          action: action,
-        }
+        )
 
         answers = interview.run
 
@@ -295,6 +317,8 @@ module PDK
         metadata.update!(answers)
 
         if opts[:prompt].nil? || opts[:prompt]
+          require 'pdk/cli/util'
+
           continue = PDK::CLI::Util.prompt_for_yes(
             _('Metadata will be generated based on this information, continue?'),
             prompt:         prompt,
@@ -307,6 +331,7 @@ module PDK
           end
         end
 
+        require 'pdk/answer_file'
         PDK.answers.update!(
           {
             'forge_username' => opts[:username],

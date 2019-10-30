@@ -1,12 +1,12 @@
 require 'spec_helper'
 
 describe PDK::Util::TemplateURI do
-  before(:each) do
-    PDK.answers.update!('template-url' => nil)
-  end
-
   subject(:template_uri) do
     described_class.new(opts_or_uri)
+  end
+
+  before(:each) do
+    PDK.answers.update!('template-url' => nil)
   end
 
   describe '.new' do
@@ -16,6 +16,18 @@ describe PDK::Util::TemplateURI do
 
         it 'can return a string for storing' do
           expect(template_uri.to_s).to eq('https://github.com/my/pdk-templates.git#custom')
+        end
+      end
+
+      context 'that contains the default template keyword' do
+        let(:opts_or_uri) { 'pdk-default#1.2.3' }
+
+        before(:each) do
+          allow(PDK::Util).to receive(:package_install?).and_return(false)
+        end
+
+        it 'converts the keyword to the default template URI' do
+          expect(template_uri.to_s).to eq('https://github.com/puppetlabs/pdk-templates#1.2.3')
         end
       end
 
@@ -35,6 +47,14 @@ describe PDK::Util::TemplateURI do
 
       it 'can return a string for storing' do
         expect(template_uri.to_s).to eq('https://github.com/my/pdk-templates.git#custom')
+      end
+    end
+
+    context 'with a PDK::Util::TemplateURI' do
+      let(:opts_or_uri) { described_class.new('https://example.com/my/template') }
+
+      it 'can return a string for storing' do
+        expect(template_uri.to_s).to eq(opts_or_uri.to_s)
       end
     end
 
@@ -81,14 +101,17 @@ describe PDK::Util::TemplateURI do
           before :each do
             PDK.answers.update!('template-url' => nil)
           end
+
           it 'returns the default template' do
             expect(template_uri.to_s).to eq(default_uri)
           end
         end
+
         context 'and there are only answers' do
           before :each do
             PDK.answers.update!('template-url' => 'answer-templates')
           end
+
           it 'returns the answers template' do
             expect(template_uri.to_s).to eq('answer-templates')
           end
@@ -104,10 +127,12 @@ describe PDK::Util::TemplateURI do
             end
           end
         end
+
         context 'and there are metadata and answers' do
           before :each do
             PDK.answers.update!('template-url' => 'answer-templates')
           end
+
           it 'returns the metadata template' do
             allow(PDK::Module::Metadata).to receive(:from_file).with('/path/to/module/metadata.json').and_return(mock_metadata)
             allow(File).to receive(:file?).with('/path/to/module/metadata.json').and_return(true)
@@ -116,6 +141,7 @@ describe PDK::Util::TemplateURI do
           end
         end
       end
+
       context 'when there are metadata and answers' do
         before :each do
           PDK.answers.update!('template-url' => 'answer-templates')
@@ -126,17 +152,19 @@ describe PDK::Util::TemplateURI do
           let(:opts_or_uri) { { :'template-url' => 'cli-templates' } }
 
           it 'returns the specified template' do
-            expect(template_uri.to_s).to eq("cli-templates##{described_class.default_template_ref}")
+            expect(template_uri.to_s).to eq('cli-templates#master')
           end
         end
+
         context 'and passed windows template-url' do
-          let(:opts_or_uri) { { :'template-url' => 'C:\cli-templates' } }
+          let(:opts_or_uri) { { :'template-url' => 'C:\\cli-templates' } }
 
           it 'returns the specified template' do
             allow(Gem).to receive(:win_platform?).and_return(true)
-            expect(template_uri.to_s).to eq("C:\\cli-templates##{described_class.default_template_ref}")
+            expect(template_uri.to_s).to eq('C:\\cli-templates#master')
           end
         end
+
         context 'and passed template-url and template-ref' do
           let(:opts_or_uri) { { :'template-url' => 'cli-templates', :'template-ref' => 'cli-ref' } }
 
@@ -176,6 +204,7 @@ describe PDK::Util::TemplateURI do
           expect(template_uri.git_remote).to eq '/my/pdk-templates.git'
         end
       end
+
       context 'on windows' do
         let(:opts_or_uri) { '/C:/my/pdk-templates.git#custom' }
 
@@ -200,7 +229,7 @@ describe PDK::Util::TemplateURI do
       let(:opts_or_uri) { 'https://github.com/my/pdk-templates.git' }
 
       it 'returns the default ref' do
-        expect(template_uri.git_ref).to eq described_class.default_template_ref
+        expect(template_uri.git_ref).to eq(described_class.default_template_ref(opts_or_uri))
       end
     end
   end
@@ -235,6 +264,7 @@ describe PDK::Util::TemplateURI do
           expect(template_uri.shell_path).to eq '/my/pdk-templates.git'
         end
       end
+
       context 'on windows' do
         let(:opts_or_uri) { '/C:/my/pdk-templates.git#custom' }
 
@@ -259,6 +289,7 @@ describe PDK::Util::TemplateURI do
         expect(default_uri.to_s).to eq('file:///path/to/pdk/pdk-templates.git')
       end
     end
+
     context 'when it is not a package install' do
       before(:each) do
         allow(PDK::Util).to receive(:package_install?).and_return(false)
@@ -271,27 +302,37 @@ describe PDK::Util::TemplateURI do
   end
 
   describe '.default_template_ref' do
-    subject { described_class.default_template_ref }
+    subject { described_class.default_template_ref(uri) }
+
+    before(:each) do
+      allow(PDK::Util).to receive(:development_mode?).and_return(development_mode)
+    end
 
     context 'with a custom template repo' do
-      before(:each) do
-        allow(described_class).to receive(:default_template_url).and_return('custom_template_url')
+      let(:uri) { described_class.new('https://github.com/my/template') }
+
+      context 'in development mode' do
+        let(:development_mode) { true }
+
+        it 'returns master' do
+          is_expected.to eq('master')
+        end
       end
 
-      it 'returns master' do
-        is_expected.to eq('master')
+      context 'not in development mode' do
+        let(:development_mode) { false }
+
+        it 'returns master' do
+          is_expected.to eq('master')
+        end
       end
     end
 
     context 'with the default template repo' do
-      before(:each) do
-        allow(described_class).to receive(:default_template_url).and_return('puppetlabs_template_url')
-      end
+      let(:uri) { described_class.default_template_uri }
 
       context 'not in development mode' do
-        before(:each) do
-          allow(PDK::Util).to receive(:development_mode?).and_return(false)
-        end
+        let(:development_mode) { false }
 
         it 'returns the built-in TEMPLATE_REF' do
           is_expected.to eq(PDK::TEMPLATE_REF)
@@ -299,9 +340,27 @@ describe PDK::Util::TemplateURI do
       end
 
       context 'in development mode' do
-        before(:each) do
-          allow(PDK::Util).to receive(:development_mode?).and_return(true)
+        let(:development_mode) { true }
+
+        it 'returns master' do
+          is_expected.to eq('master')
         end
+      end
+    end
+
+    context 'with an explicit nil template' do
+      let(:uri) { nil }
+
+      context 'not in development mode' do
+        let(:development_mode) { false }
+
+        it 'returns the built-in TEMPLATE_REF' do
+          is_expected.to eq(PDK::TEMPLATE_REF)
+        end
+      end
+
+      context 'in development mode' do
+        let(:development_mode) { true }
 
         it 'returns master' do
           is_expected.to eq('master')
@@ -418,6 +477,55 @@ describe PDK::Util::TemplateURI do
         is_expected.not_to include(type: 'PDK answers', uri: anything, allow_fallback: true)
       end
     end
+
+    context 'when the metadata contains a template-url' do
+      let(:mock_metadata) do
+        instance_double(
+          PDK::Module::Metadata,
+          data: {
+            'pdk-version'  => PDK::VERSION,
+            'template-url' => metadata_url,
+          },
+        )
+      end
+
+      before(:each) do
+        allow(PDK::Util).to receive(:module_root).and_return('/path/to/module')
+        allow(PDK::Util).to receive(:development_mode?).and_return(false)
+        allow(PDK::Module::Metadata).to receive(:from_file).with('/path/to/module/metadata.json').and_return(mock_metadata)
+        allow(File).to receive(:file?).with('/path/to/module/metadata.json').and_return(true)
+        allow(File).to receive(:file?).with(%r{PDK_VERSION}).and_return(true)
+      end
+
+      context 'that is a pdk-default keyword' do
+        let(:metadata_url) { 'pdk-default#master' }
+
+        it 'converts the keyword to the defalut template' do
+          is_expected.to include(
+            type: 'metadata.json',
+            uri:  described_class.default_template_uri('master').uri,
+            allow_fallback: true,
+          )
+        end
+      end
+
+      context 'that is an SCP style URL' do
+        let(:metadata_url) { 'git@github.com:puppetlabs/pdk-templates.git' }
+
+        it 'converts the URL to and ssh:// URI' do
+          is_expected.to include(
+            type: 'metadata.json',
+            uri:  Addressable::URI.new(
+              scheme: 'ssh',
+              user:   'git',
+              host:   'github.com',
+              path:   '/puppetlabs/pdk-templates.git',
+            ),
+            allow_fallback: true,
+          )
+        end
+      end
+    end
   end
 
   describe '.valid_template?' do
@@ -496,6 +604,87 @@ describe PDK::Util::TemplateURI do
             end
           end
         end
+      end
+    end
+  end
+
+  describe '.packaged_template?' do
+    subject { described_class.packaged_template?(path) }
+
+    context 'when the path is windows default' do
+      let(:path) { 'file:///C:/Program Files/Puppet Labs/DevelopmentKit/share/cache/pdk-templates.git' }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when the path is posix default' do
+      let(:path) { 'file:///opt/puppetlabs/pdk/share/cache/pdk-templates.git' }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when the path is the default template keyword' do
+      let(:path) { described_class::PACKAGED_TEMPLATE_KEYWORD }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when the path is not a default' do
+      let(:path) { File.join('a', 'custom', 'path') }
+
+      it { is_expected.to be_falsey }
+    end
+  end
+
+  describe '#metadata_format' do
+    subject { described_class.new(url).metadata_format }
+
+    context 'when running PDK from a package' do
+      before(:each) do
+        allow(PDK::Util).to receive(:package_install?).and_return(true)
+        allow(PDK::Util).to receive(:pdk_package_basedir).and_return('/opt/puppetlabs/pdk')
+      end
+
+      context 'and using the packaged windows template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['windows']}#master" }
+
+        it { is_expected.to eq('pdk-default#master') }
+      end
+
+      context 'and using the packaged linux template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['linux']}#something" }
+
+        it { is_expected.to eq('pdk-default#something') }
+      end
+
+      context 'and using the packaged osx template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['macos']}#else" }
+
+        it { is_expected.to eq('pdk-default#else') }
+      end
+    end
+
+    context 'when not running PDK from a package' do
+      before(:each) do
+        allow(PDK::Util).to receive(:package_install?).and_return(false)
+      end
+
+      context 'and using the packaged windows template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['windows']}#master" }
+
+        it { is_expected.to eq('https://github.com/puppetlabs/pdk-templates#master') }
+      end
+
+      context 'and using the packaged linux template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['linux']}#something" }
+
+        it { is_expected.to eq('https://github.com/puppetlabs/pdk-templates#something') }
+      end
+
+      context 'and using the packaged osx template' do
+        let(:url) { "#{described_class::LEGACY_PACKAGED_TEMPLATE_PATHS['macos']}#else" }
+
+        it { is_expected.to eq('https://github.com/puppetlabs/pdk-templates#else') }
       end
     end
   end

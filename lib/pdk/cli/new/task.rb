@@ -7,6 +7,8 @@ module PDK::CLI
     option nil, :description, _('A short description of the purpose of the task'), argument: :required
 
     run do |opts, args, _cmd|
+      require 'pdk/generate/task'
+
       PDK::CLI::Util.ensure_in_module!(
         message:   _('Tasks can only be created from inside a valid module directory.'),
         log_level: :info,
@@ -23,6 +25,8 @@ module PDK::CLI
       unless Util::OptionValidator.valid_task_name?(task_name)
         raise PDK::CLI::ExitWithError, _("'%{name}' is not a valid task name") % { name: task_name }
       end
+
+      PDK::CLI::Util.analytics_screen_view('new_task', opts)
 
       PDK::Generate::Task.new(module_dir, task_name, opts).run
     end

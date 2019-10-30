@@ -1,4 +1,3 @@
-require 'json'
 require 'pdk/util/filesystem'
 
 module PDK
@@ -20,7 +19,7 @@ module PDK
           },
           {
             'operatingsystem'        => 'RedHat',
-            'operatingsystemrelease' => ['7'],
+            'operatingsystemrelease' => ['8'],
           },
           {
             'operatingsystem'        => 'Scientific',
@@ -30,16 +29,16 @@ module PDK
         'Debian based Linux' => [
           {
             'operatingsystem'        => 'Debian',
-            'operatingsystemrelease' => ['8'],
+            'operatingsystemrelease' => ['9'],
           },
           {
             'operatingsystem'        => 'Ubuntu',
-            'operatingsystemrelease' => ['16.04'],
+            'operatingsystemrelease' => ['18.04'],
           },
         ],
         'Fedora' => {
           'operatingsystem'        => 'Fedora',
-          'operatingsystemrelease' => ['25'],
+          'operatingsystemrelease' => ['29'],
         },
         'OSX' => {
           'operatingsystem'        => 'Darwin',
@@ -47,7 +46,7 @@ module PDK
         },
         'SLES' => {
           'operatingsystem'        => 'SLES',
-          'operatingsystemrelease' => ['12'],
+          'operatingsystemrelease' => ['15'],
         },
         'Solaris' => {
           'operatingsystem'        => 'Solaris',
@@ -55,7 +54,7 @@ module PDK
         },
         'Windows' => {
           'operatingsystem'        => 'windows',
-          'operatingsystemrelease' => ['2008 R2', '2012 R2', '10'],
+          'operatingsystemrelease' => %w[2019 10],
         },
       }.freeze
 
@@ -94,20 +93,22 @@ module PDK
           raise ArgumentError, _('Cannot read metadata from file: no path to file was given.')
         end
 
-        unless File.file?(metadata_json_path)
+        unless PDK::Util::Filesystem.file?(metadata_json_path)
           raise ArgumentError, _("'%{file}' does not exist or is not a file.") % { file: metadata_json_path }
         end
 
-        unless File.readable?(metadata_json_path)
+        unless PDK::Util::Filesystem.readable?(metadata_json_path)
           raise ArgumentError, _("Unable to open '%{file}' for reading.") % { file: metadata_json_path }
         end
 
+        require 'json'
         begin
-          data = JSON.parse(File.read(metadata_json_path))
+          data = JSON.parse(PDK::Util::Filesystem.read_file(metadata_json_path))
         rescue JSON::JSONError => e
           raise ArgumentError, _('Invalid JSON in metadata.json: %{msg}') % { msg: e.message }
         end
 
+        data['template-url'] = PDK::Util::TemplateURI.default_template_uri.metadata_format if PDK::Util.package_install? && data['template-url'] == PDK::Util::TemplateURI::PACKAGED_TEMPLATE_KEYWORD
         new(data)
       end
 
@@ -119,6 +120,8 @@ module PDK
       end
 
       def to_json
+        require 'json'
+
         JSON.pretty_generate(@data.dup.delete_if { |_key, value| value.nil? })
       end
 
@@ -131,6 +134,8 @@ module PDK
       end
 
       def interview_for_forge!
+        require 'pdk/generate/module'
+
         PDK::Generate::Module.module_interview(self, only_ask: missing_fields)
       end
 

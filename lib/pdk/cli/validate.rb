@@ -1,5 +1,3 @@
-require 'pdk/util/bundler'
-
 module PDK::CLI
   @validate_cmd = @base_cmd.define_command do
     name 'validate'
@@ -26,11 +24,14 @@ module PDK::CLI
         exit 0
       end
 
+      require 'pdk/validate'
+
       validator_names = PDK::Validate.validators.map { |v| v.name }
       validators = PDK::Validate.validators
       targets = []
 
       if opts[:list]
+        PDK::CLI::Util.analytics_screen_view('validate', opts)
         PDK.logger.info(_('Available validators: %{validator_names}') % { validator_names: validator_names.join(', ') })
         exit 0
       end
@@ -71,6 +72,12 @@ module PDK::CLI
         PDK.logger.info(_('Running all available validators...'))
       end
 
+      if validators == PDK::Validate.validators
+        PDK::CLI::Util.analytics_screen_view('validate', opts)
+      else
+        PDK::CLI::Util.analytics_screen_view(['validate', validators.map(&:name).sort].flatten.join('_'), opts)
+      end
+
       # Subsequent arguments are targets.
       targets.concat(args.to_a[1..-1]) if args.length > 1
 
@@ -85,19 +92,23 @@ module PDK::CLI
                        end
 
       options = targets.empty? ? {} : { targets: targets }
-      options[:auto_correct] = true if opts.key?(:'auto-correct')
+      options[:auto_correct] = true if opts[:'auto-correct']
 
       # Ensure that the bundled gems are up to date and correct Ruby is activated before running any validations.
       puppet_env = PDK::CLI::Util.puppet_from_opts_or_env(opts)
-      PDK::Util::PuppetVersion.fetch_puppet_dev if opts.key?(:'puppet-dev')
+      PDK::Util::PuppetVersion.fetch_puppet_dev if opts[:'puppet-dev']
       PDK::Util::RubyVersion.use(puppet_env[:ruby_version])
 
       options.merge!(puppet_env[:gemset])
+
+      require 'pdk/util/bundler'
 
       PDK::Util::Bundler.ensure_bundle!(puppet_env[:gemset])
 
       exit_code = 0
       if opts[:parallel]
+        require 'pdk/cli/exec_group'
+
         exec_group = PDK::CLI::ExecGroup.new(_('Validating module using %{num_of_threads} threads' % { num_of_threads: validators.count }), opts)
 
         validators.each do |validator|

@@ -1,6 +1,3 @@
-require 'pdk/util'
-require 'pdk/util/git'
-
 module PDK
   module Util
     class PuppetVersion
@@ -21,6 +18,8 @@ module PDK
       DEFAULT_PUPPET_DEV_BRANCH = 'master'.freeze
 
       def puppet_dev_env
+        require 'pdk/util/ruby_version'
+
         {
           gem_version: 'file://%{path}' % { path: puppet_dev_path },
           ruby_version: PDK::Util::RubyVersion.latest_ruby_version,
@@ -28,6 +27,8 @@ module PDK
       end
 
       def puppet_dev_path
+        require 'pdk/util'
+
         File.join(PDK::Util.cachedir, 'src', 'puppet')
       end
 
@@ -42,6 +43,9 @@ module PDK
       end
 
       def fetch_puppet_dev
+        require 'pdk/util/git'
+        require 'fileutils'
+
         # Check if the source is cloned and is a readable git repo
         unless PDK::Util::Git.remote_repo? puppet_dev_path
           # Check if the path has something in it already. Delete it and prepare for clone if so.
@@ -56,7 +60,7 @@ module PDK
 
           PDK.logger.error clone_result[:stdout]
           PDK.logger.error clone_result[:stderr]
-          raise PDK::CLI::FatalError, _("Unable to clone git repository at '%{repo}'.") % { repo: DEFAULT_PUPPET_DEV_URL }
+          raise PDK::CLI::FatalError, _("Unable to clone git repository from '%{repo}'.") % { repo: DEFAULT_PUPPET_DEV_URL }
         end
 
         # Fetch Updates from remote repository
@@ -133,12 +137,15 @@ module PDK
       end
 
       def from_module_metadata(metadata = nil)
+        require 'pdk/module/metadata'
+        require 'pdk/util'
+
         if metadata.nil?
           metadata_file = PDK::Util.find_upwards('metadata.json')
 
           unless metadata_file
             PDK.logger.warn _('Unable to determine Puppet version for module: no metadata.json present in module.')
-            return nil
+            return
           end
 
           metadata = PDK::Module::Metadata.from_file(metadata_file)
@@ -191,6 +198,8 @@ module PDK
       end
 
       def fetch_pe_version_map
+        require 'pdk/util/vendored_file'
+
         map = PDK::Util::VendoredFile.new('pe_versions.json', PE_VERSIONS_URL).read
 
         JSON.parse(map)
@@ -205,17 +214,19 @@ module PDK
       end
 
       def rubygems_puppet_versions
-        return @rubygems_puppet_versions unless @rubygems_puppet_versions.nil?
-
-        fetcher = Gem::SpecFetcher.fetcher
-        puppet_tuples = fetcher.detect(:released) do |spec_tuple|
-          spec_tuple.name == 'puppet' && Gem::Platform.match(spec_tuple.platform)
+        @rubygems_puppet_versions ||= begin
+          fetcher = Gem::SpecFetcher.fetcher
+          puppet_tuples = fetcher.detect(:released) do |spec_tuple|
+            spec_tuple.name == 'puppet' && Gem::Platform.match(spec_tuple.platform)
+          end
+          puppet_versions = puppet_tuples.map { |name, _| name.version }.uniq
+          puppet_versions.sort { |a, b| b <=> a }
         end
-        puppet_versions = puppet_tuples.map { |name, _| name.version }.uniq
-        @rubygems_puppet_versions = puppet_versions.sort { |a, b| b <=> a }
       end
 
       def find_gem(requirement)
+        require 'pdk/util'
+
         if PDK::Util.package_install?
           find_in_package_cache(requirement)
         else
@@ -224,11 +235,15 @@ module PDK
       end
 
       def find_in_rubygems(requirement)
+        require 'pdk/util/ruby_version'
+
         version = rubygems_puppet_versions.find { |r| requirement.satisfied_by?(r) }
         version.nil? ? nil : { gem_version: version, ruby_version: PDK::Util::RubyVersion.default_ruby_version }
       end
 
       def find_in_package_cache(requirement)
+        require 'pdk/util/ruby_version'
+
         PDK::Util::RubyVersion.versions.each do |ruby_version, _|
           PDK::Util::RubyVersion.use(ruby_version)
           version = PDK::Util::RubyVersion.available_puppet_versions.find { |r| requirement.satisfied_by?(r) }

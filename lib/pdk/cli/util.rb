@@ -48,9 +48,32 @@ module PDK
       end
       module_function :prompt_for_yes
 
+      # Uses environment variables to detect if the current process is running in common
+      # Continuous Integration (CI) environments
+      # @return [Boolean] Whether the PDK is in a CI based environment
+      def ci_environment?
+        [
+          'CI',                     # Generic
+          'CONTINUOUS_INTEGRATION', # Generic
+          'APPVEYOR_BUILD_FOLDER',  # AppVeyor CI
+          'GITLAB_CI',              # GitLab CI
+          'JENKINS_URL',            # Jenkins
+          'BUILD_DEFINITIONNAME',   # Azure Pipelines
+          'TEAMCITY_VERSION',       # Team City
+          'BAMBOO_BUILDKEY',        # Bamboo
+          'GOCD_SERVER_URL',        # Go CD
+          'TRAVIS',                 # Travis CI
+          'GITHUB_WORKFLOW',        # GitHub Actions
+        ].any? { |name| ENV.key?(name) }
+      end
+      module_function :ci_environment?
+
       def interactive?
+        require 'pdk/logger'
+
         return false if PDK.logger.debug?
         return !ENV['PDK_FRONTEND'].casecmp('noninteractive').zero? if ENV['PDK_FRONTEND']
+        return false if ci_environment?
         return false unless $stderr.isatty
 
         true
@@ -82,10 +105,31 @@ module PDK
       end
       module_function :module_version_check
 
-      def puppet_from_opts_or_env(opts)
-        use_puppet_dev = (opts || {})[:'puppet-dev'] || ENV['PDK_PUPPET_DEV']
-        desired_puppet_version = (opts || {})[:'puppet-version'] || ENV['PDK_PUPPET_VERSION']
-        desired_pe_version = (opts || {})[:'pe-version'] || ENV['PDK_PE_VERSION']
+      def check_for_deprecated_puppet(version)
+        return unless version.is_a?(Gem::Version)
+
+        deprecated_below = Gem::Version.new('5.0.0')
+        return unless version < deprecated_below
+
+        deprecated_msg = _(
+          'Support for Puppet versions older than %{version} is ' \
+          'deprecated and will be removed in a future version of PDK.',
+        ) % { version: deprecated_below.to_s }
+        PDK.logger.warn(deprecated_msg)
+      end
+      module_function :check_for_deprecated_puppet
+
+      # @param opts [Hash] - the pdk options ot use, defaults to empty hash
+      # @option opts [String] :'puppet-dev' Use the puppet development version, default to PDK_PUPPET_DEV env
+      # @option opts [String] :'puppet-version' Puppet version to use, default to PDK_PUPPET_VERSION env
+      # @option opts [String] :'pe-version' PE Puppet version to use, default to PDK_PE_VERSION env
+      # @param logging_disabled [Boolean] - disable logging of PDK info
+      # @return [Hash] - return hash of { gemset: <>, ruby_version: 2.x.x }
+      def puppet_from_opts_or_env(opts, logging_disabled = false)
+        opts ||= {}
+        use_puppet_dev = opts.fetch(:'puppet-dev', ENV['PDK_PUPPET_DEV'])
+        desired_puppet_version = opts.fetch(:'puppet-version', ENV['PDK_PUPPET_VERSION'])
+        desired_pe_version = opts.fetch(:'pe-version', ENV['PDK_PE_VERSION'])
 
         begin
           puppet_env =
@@ -103,20 +147,26 @@ module PDK
         end
 
         # Notify user of what Ruby version will be used.
-        PDK.logger.info(_('Using Ruby %{version}') % {
-          version: puppet_env[:ruby_version],
-        })
+        unless logging_disabled
+          PDK.logger.info(_('Using Ruby %{version}') % {
+            version: puppet_env[:ruby_version],
+          })
+        end
+
+        check_for_deprecated_puppet(puppet_env[:gem_version])
 
         gemset = { puppet: puppet_env[:gem_version].to_s }
 
         # Notify user of what gems are being activated.
-        gemset.each do |gem, version|
-          next if version.nil?
+        unless logging_disabled
+          gemset.each do |gem, version|
+            next if version.nil?
 
-          PDK.logger.info(_('Using %{gem} %{version}') % {
-            gem: gem.to_s.capitalize,
-            version: version,
-          })
+            PDK.logger.info(_('Using %{gem} %{version}') % {
+              gem: gem.to_s.capitalize,
+              version: version,
+            })
+          end
         end
 
         {
@@ -143,7 +193,7 @@ module PDK
           [puppet_ver_specs, pe_ver_specs].each do |offending|
             next if offending.empty?
 
-            raise PDK::CLI::ExitWithError, _('You cannot specify a %{first} and %{second} at the same time') % {
+            raise PDK::CLI::ExitWithError, _('You cannot specify a %{first} and %{second} at the same time.') % {
               first: pup_dev_spec,
               second: offending.first,
             }
@@ -198,6 +248,43 @@ module PDK
         raise PDK::CLI::ExitWithError, _('--template-url may not be used to specify paths containing #\'s.')
       end
       module_function :validate_template_opts
+
+      def analytics_screen_view(screen_name, opts = {})
+        require 'pdk/analytics'
+
+        dimensions = {
+          ruby_version: RUBY_VERSION,
+        }
+
+        cmd_opts = opts.dup.reject do |_, v|
+          v.nil? || (v.respond_to?(:empty?) && v.empty?)
+        end
+
+        if (format_args = cmd_opts.delete(:format))
+          formats = PDK::CLI::Util::OptionNormalizer.report_formats(format_args)
+          dimensions[:output_format] = formats.map { |r| r[:method].to_s.gsub(%r{\Awrite_}, '') }.sort.uniq.join(',')
+        else
+          dimensions[:output_format] = 'default'
+        end
+
+        safe_opts = [:'puppet-version', :'pe-version']
+        redacted_opts = cmd_opts.map do |k, v|
+          value = if [true, false].include?(v) || safe_opts.include?(k)
+                    v
+                  else
+                    'redacted'
+                  end
+          "#{k}=#{value}"
+        end
+        dimensions[:cli_options] = redacted_opts.join(',') unless redacted_opts.empty?
+
+        ignored_env_vars = %w[PDK_ANALYTICS_CONFIG PDK_DISABLE_ANALYTICS]
+        env_vars = ENV.select { |k, _| k.start_with?('PDK_') && !ignored_env_vars.include?(k) }.map { |k, v| "#{k}=#{v}" }
+        dimensions[:env_vars] = env_vars.join(',') unless env_vars.empty?
+
+        PDK.analytics.screen_view(screen_name, dimensions)
+      end
+      module_function :analytics_screen_view
     end
   end
 end

@@ -1,8 +1,3 @@
-require 'pdk/generate/module'
-require 'pdk/module/update_manager'
-require 'pdk/util'
-require 'pdk/report'
-
 module PDK
   module Module
     class Convert
@@ -16,11 +11,22 @@ module PDK
         @options = options
       end
 
+      def convert?
+        instance_of?(PDK::Module::Convert)
+      end
+
       def run
         stage_changes!
 
         unless update_manager.changes?
-          PDK::Report.default_target.puts(_('No changes required.'))
+          if adding_tests?
+            add_tests!
+          else
+            require 'pdk/report'
+
+            PDK::Report.default_target.puts(_('No changes required.'))
+          end
+
           return
         end
 
@@ -31,6 +37,8 @@ module PDK
         return if noop?
 
         unless force?
+          require 'pdk/cli/util'
+
           PDK.logger.info _(
             'Module conversion is a potentially destructive action. ' \
             'Ensure that you have committed your module to a version control ' \
@@ -48,7 +56,12 @@ module PDK
 
         update_manager.sync_changes!
 
-        PDK::Util::Bundler.ensure_bundle! if needs_bundle_update?
+        if needs_bundle_update?
+          require 'pdk/util/bundler'
+          PDK::Util::Bundler.ensure_bundle!
+        end
+
+        add_tests! if adding_tests?
 
         print_result 'Convert completed'
       end
@@ -61,32 +74,71 @@ module PDK
         options[:force]
       end
 
+      def add_tests?
+        options[:'add-tests']
+      end
+
+      def adding_tests?
+        add_tests? && missing_tests?
+      end
+
+      def missing_tests?
+        test_generators.any? { |gen| gen.can_run? }
+      end
+
+      def test_generators
+        return @test_generators unless @test_generators.nil?
+        require 'pdk/util/puppet_strings'
+
+        test_gens = PDK::Util::PuppetStrings.all_objects.map do |generator, objects|
+          (objects || []).map do |obj|
+            generator.new(Dir.pwd, obj['name'], spec_only: true)
+          end
+        end
+
+        @test_generators = test_gens.flatten
+      end
+
+      def add_tests!
+        test_generators.each do |gen|
+          gen.run if gen.can_run?
+        end
+      end
+
       def needs_bundle_update?
         update_manager.changed?('Gemfile')
       end
 
       def stage_changes!
+        require 'pdk/module/templatedir'
+        require 'pdk/util/filesystem'
+
         metadata_path = 'metadata.json'
 
-        PDK::Module::TemplateDir.new(template_uri, nil, false) do |templates|
+        PDK::Module::TemplateDir.new(template_uri, nil, true) do |templates|
           new_metadata = update_metadata(metadata_path, templates.metadata)
           templates.module_metadata = new_metadata.data unless new_metadata.nil?
 
           if options[:noop] && new_metadata.nil?
             update_manager.add_file(metadata_path, '')
-          elsif File.file?(metadata_path)
+          elsif PDK::Util::Filesystem.file?(metadata_path)
             update_manager.modify_file(metadata_path, new_metadata.to_json)
           else
             update_manager.add_file(metadata_path, new_metadata.to_json)
           end
 
           templates.render do |file_path, file_content, file_status|
-            if file_status == :unmanage
+            case file_status
+            when :unmanage
               PDK.logger.debug(_("skipping '%{path}'") % { path: file_path })
-            elsif file_status == :delete
+            when :delete
               update_manager.remove_file(file_path)
-            elsif file_status == :manage
-              if File.exist? file_path
+            when :init
+              if convert? && !PDK::Util::Filesystem.exist?(file_path)
+                update_manager.add_file(file_path, file_content)
+              end
+            when :manage
+              if PDK::Util::Filesystem.exist?(file_path)
                 update_manager.modify_file(file_path, file_content)
               else
                 update_manager.add_file(file_path, file_content)
@@ -99,16 +151,24 @@ module PDK
       end
 
       def update_manager
+        require 'pdk/module/update_manager'
+
         @update_manager ||= PDK::Module::UpdateManager.new
       end
 
       def template_uri
+        require 'pdk/util/template_uri'
+
         @template_uri ||= PDK::Util::TemplateURI.new(options)
       end
 
       def update_metadata(metadata_path, template_metadata)
-        if File.file?(metadata_path)
-          unless File.readable?(metadata_path)
+        require 'pdk/generate/module'
+        require 'pdk/util/filesystem'
+        require 'pdk/module/metadata'
+
+        if PDK::Util::Filesystem.file?(metadata_path)
+          unless PDK::Util::Filesystem.readable?(metadata_path)
             raise PDK::CLI::ExitWithError, _('Unable to update module metadata; %{path} exists but it is not readable.') % {
               path: metadata_path,
             }
@@ -124,12 +184,12 @@ module PDK
           rescue ArgumentError
             metadata = PDK::Generate::Module.prepare_metadata(options) unless options[:noop]
           end
-        elsif File.exist?(metadata_path)
+        elsif PDK::Util::Filesystem.exist?(metadata_path)
           raise PDK::CLI::ExitWithError, _('Unable to update module metadata; %{path} exists but it is not a file.') % {
             path: metadata_path,
           }
         else
-          return nil if options[:noop]
+          return if options[:noop]
 
           project_dir = File.basename(Dir.pwd)
           options[:module_name] = project_dir.split('-', 2).compact[-1]
@@ -163,6 +223,8 @@ module PDK
       end
 
       def print_summary
+        require 'pdk/report'
+
         footer = false
 
         summary.keys.each do |category|
@@ -177,12 +239,16 @@ module PDK
       end
 
       def print_result(banner_text)
+        require 'pdk/report'
+
         PDK::Report.default_target.puts(_("\n%{banner}") % { banner: generate_banner(banner_text, 40) })
         summary_to_print = summary.map { |k, v| "#{v.length} files #{k}" unless v.empty? }.compact
         PDK::Report.default_target.puts(_("\n%{summary}\n\n") % { summary: "#{summary_to_print.join(', ')}." })
       end
 
       def full_report(path)
+        require 'pdk/report'
+
         File.open(path, 'w') do |f|
           f.write("/* Report generated by PDK at #{Time.now} */")
           update_manager.changes[:modified].each do |_, diff|

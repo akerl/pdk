@@ -58,7 +58,7 @@ namespace :acceptance do
         $stderr.puts "SUITE_VERSION has not been set. Fetching it from build metadata for '#{ENV['SHA']}' at '#{metadata_url}'"
 
         begin
-          ENV['SUITE_VERSION'] = JSON.parse(open(metadata_url).read)['version']
+          ENV['SUITE_VERSION'] = JSON.parse(URI.parse(metadata_url).read)['version']
         rescue StandardError => e
           abort("Could not get build metadata from build server. Tried to request '#{metadata_url}' and got: #{e.message}")
         end
@@ -82,7 +82,7 @@ namespace :acceptance do
   desc 'Run acceptance tests against a pdk package'
   RSpec::Core::RakeTask.new(:package) do |t|
     t.rspec_opts = ['--format documentation']
-    t.pattern = 'spec/package/**/*_spec.rb'
+    t.pattern = ENV['RSPEC_PATTERN'] || 'spec/package/**/*_spec.rb'
   end
   task package: [:hostgen]
 

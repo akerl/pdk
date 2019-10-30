@@ -7,6 +7,7 @@ describe 'PDK::CLI update' do
   end
   let(:current_version) { '1.2.3' }
   let(:new_version) { '1.2.4' }
+  let(:module_pdk_version) { PDK::VERSION }
 
   context 'when not run from inside a module' do
     include_context 'run outside module'
@@ -16,38 +17,88 @@ describe 'PDK::CLI update' do
 
       expect { PDK::CLI.run(%w[update]) }.to exit_nonzero
     end
+
+    it 'does not submit the command to analytics' do
+      expect(analytics).not_to receive(:screen_view)
+
+      expect { PDK::CLI.run(%w[update]) }.to exit_nonzero
+    end
   end
 
   context 'when run from inside a module' do
     before(:each) do
       allow(PDK::Util).to receive(:module_root).and_return('/path/to/test/module')
       allow(PDK::Util).to receive(:module_pdk_compatible?).and_return(true)
+      allow(PDK::Util).to receive(:module_pdk_version).and_return(module_pdk_version)
     end
 
     context 'and provided no flags' do
-      it 'invokes the updater with no options' do
-        expect(PDK::Module::Update).to receive(:new).with({}).and_return(updater)
-        expect(updater).to receive(:run)
-
+      after(:each) do
         PDK::CLI.run(%w[update])
+      end
+
+      it 'invokes the updater with no options' do
+        expect(PDK::Module::Update).to receive(:new) { |opts|
+          expect(opts[:noop]).to be false if opts.key?(:noop)
+          expect(opts[:force]).to be false if opts.key?(:false) # rubocop:disable Lint/BooleanSymbol
+          expect(opts).not_to include(:'template-ref')
+        }.and_return(updater)
+
+        expect(updater).to receive(:run)
+      end
+
+      it 'submits the command to analytics' do
+        allow(PDK::Module::Update).to receive(:new).with(anything).and_return(updater)
+
+        expect(analytics).to receive(:screen_view).with(
+          'update',
+          output_format: 'default',
+          ruby_version:  RUBY_VERSION,
+        )
       end
     end
 
     context 'and the --noop flag has been passed' do
-      it 'passes the noop option through to the updater' do
-        expect(PDK::Module::Update).to receive(:new).with(noop: true).and_return(updater)
-        expect(updater).to receive(:run)
-
+      after(:each) do
         PDK::CLI.run(%w[update --noop])
+      end
+
+      it 'passes the noop option through to the updater' do
+        expect(PDK::Module::Update).to receive(:new).with(hash_including(noop: true)).and_return(updater)
+        expect(updater).to receive(:run)
+      end
+
+      it 'submits the command to analytics' do
+        allow(PDK::Module::Update).to receive(:new).with(anything).and_return(updater)
+
+        expect(analytics).to receive(:screen_view).with(
+          'update',
+          cli_options:   'noop=true',
+          output_format: 'default',
+          ruby_version:  RUBY_VERSION,
+        )
       end
     end
 
     context 'and the --force flag has been passed' do
-      it 'passes the force option through to the updater' do
-        expect(PDK::Module::Update).to receive(:new).with(force: true).and_return(updater)
-        expect(updater).to receive(:run)
-
+      after(:each) do
         PDK::CLI.run(%w[update --force])
+      end
+
+      it 'passes the force option through to the updater' do
+        expect(PDK::Module::Update).to receive(:new).with(hash_including(force: true)).and_return(updater)
+        expect(updater).to receive(:run)
+      end
+
+      it 'submits the command to analytics' do
+        allow(PDK::Module::Update).to receive(:new).with(anything).and_return(updater)
+
+        expect(analytics).to receive(:screen_view).with(
+          'update',
+          cli_options:   'force=true',
+          output_format: 'default',
+          ruby_version:  RUBY_VERSION,
+        )
       end
     end
 
@@ -56,6 +107,34 @@ describe 'PDK::CLI update' do
         expect(logger).to receive(:error).with(a_string_matching(%r{can not specify --noop and --force}i))
 
         expect { PDK::CLI.run(%w[update --noop --force]) }.to exit_nonzero
+      end
+
+      it 'does not submit the command to analytics' do
+        expect(analytics).not_to receive(:screen_view)
+
+        expect { PDK::CLI.run(%w[update --noop --force]) }.to exit_nonzero
+      end
+    end
+
+    context 'and the module metadata specifies a newer PDK version' do
+      let(:module_pdk_version) { '999.9.9' }
+
+      context 'and the --force flag has not been passed' do
+        it 'warns the user and then aborts' do
+          expect(logger).to receive(:warn).with(a_string_matching(%r{newer than your PDK version}i))
+          expect(logger).to receive(:error).with(a_string_matching(%r{update your PDK installation}i))
+
+          expect { PDK::CLI.run(%w[update]) }.to exit_nonzero
+        end
+      end
+
+      context 'and the --force flag has been passed' do
+        it 'warns the user and then continues' do
+          allow(PDK::Module::Update).to receive(:new).with(hash_including(force: true)).and_return(updater)
+          expect(logger).to receive(:warn).with(a_string_matching(%r{newer than your PDK version}i))
+
+          PDK::CLI.run(%w[update --force])
+        end
       end
     end
   end
@@ -69,6 +148,12 @@ describe 'PDK::CLI update' do
     context 'and provided no flags' do
       it 'raises ExitWithError' do
         expect(logger).to receive(:error).with(a_string_matching(%r{This module does not appear to be PDK compatible}i))
+
+        expect { PDK::CLI.run(%w[update]) }.to exit_nonzero
+      end
+
+      it 'does not submit the command to analytics' do
+        expect(analytics).not_to receive(:screen_view)
 
         expect { PDK::CLI.run(%w[update]) }.to exit_nonzero
       end

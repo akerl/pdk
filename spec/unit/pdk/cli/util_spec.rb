@@ -64,6 +64,7 @@ describe PDK::CLI::Util do
     before(:each) do
       allow(PDK.logger).to receive(:debug?).and_return(false)
       allow($stderr).to receive(:isatty).and_return(true)
+      allow(PDK::CLI::Util).to receive(:ci_environment?).and_return(false) # rubocop:disable RSpec/DescribedClass This reads better
       ENV.delete('PDK_FRONTEND')
     end
 
@@ -82,6 +83,14 @@ describe PDK::CLI::Util do
     context 'when PDK_FRONTEND env var is set to noninteractive' do
       before(:each) do
         ENV['PDK_FRONTEND'] = 'noninteractive'
+      end
+
+      it { is_expected.to be_falsey }
+    end
+
+    context 'when in a Continuous Integration environment' do
+      before(:each) do
+        allow(PDK::CLI::Util).to receive(:ci_environment?).and_return(true) # rubocop:disable RSpec/DescribedClass This reads better
       end
 
       it { is_expected.to be_falsey }
@@ -338,6 +347,39 @@ describe PDK::CLI::Util do
 
       it 'raises a PDK::CLI::ExitWithError' do
         expect { puppet_env }.to raise_error(PDK::CLI::ExitWithError, 'error msg')
+      end
+    end
+
+    context 'when the Puppet version is older than 5.0.0' do
+      let(:options) { { :'puppet-version' => '4.10.10' } }
+      let(:ruby_version) { '2.1.9' }
+      let(:puppet_version) { '4.10.10' }
+
+      before(:each) do
+        allow(PDK::Util::PuppetVersion).to receive(:find_gem_for).with(anything).and_return(version_result)
+      end
+
+      it 'warn the user about the deprecated version' do
+        expect(logger).to receive(:warn)
+          .with(a_string_matching(%r{older than 5\.0\.0 is deprecated}))
+
+        puppet_env
+      end
+    end
+
+    context 'when the Puppet version is at least 5.0.0' do
+      let(:options) { { :'puppet-version' => '5.0.0' } }
+      let(:ruby_version) { '2.4.5' }
+      let(:puppet_version) { '5.0.0' }
+
+      before(:each) do
+        allow(PDK::Util::PuppetVersion).to receive(:find_gem_for).with(anything).and_return(version_result)
+      end
+
+      it 'does not issue a deprecation warning' do
+        expect(logger).not_to receive(:warn)
+
+        puppet_env
       end
     end
   end

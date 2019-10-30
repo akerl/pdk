@@ -1,6 +1,3 @@
-require 'rexml/document'
-require 'pathname'
-
 module PDK
   class Report
     class Event
@@ -132,6 +129,8 @@ module PDK
       #
       # @return [REXML::Element] The rendered event.
       def to_junit
+        require 'rexml/document'
+
         testcase = REXML::Element.new('testcase')
         testcase.attributes['classname'] = [source, test].compact.join('.')
         testcase.attributes['name'] = [file, line, column].compact.join(':')
@@ -194,6 +193,9 @@ module PDK
         unless value.is_a?(String)
           raise ArgumentError, _('File must be a String.')
         end
+
+        require 'pathname'
+        require 'pdk/util'
 
         path = Pathname.new(value)
 
@@ -267,7 +269,7 @@ module PDK
       # @return [Integer] the provided value, converted into an Integer if
       #   necessary.
       def sanitise_line(value)
-        return nil if value.nil?
+        return if value.nil?
 
         valid_types = [String, Integer]
         if RUBY_VERSION.split('.')[0..1].join('.').to_f < 2.4
@@ -292,7 +294,7 @@ module PDK
       # @return [Integer] the provided value, converted into an Integer if
       #   necessary.
       def sanitise_column(value)
-        return nil if value.nil?
+        return if value.nil?
 
         valid_types = [String, Integer]
         if RUBY_VERSION.split('.')[0..1].join('.').to_f < 2.4
@@ -317,7 +319,7 @@ module PDK
       #
       # @return [Array] Array of stack trace lines with less relevant lines excluded
       def sanitise_trace(value)
-        return nil if value.nil?
+        return if value.nil?
 
         valid_types = [Array]
 

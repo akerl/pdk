@@ -28,12 +28,18 @@ if ENV['COVERAGE'] == 'yes'
   end
 end
 
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'pdk'
 require 'pdk/cli'
+require 'tempfile'
+require 'json'
 
 # automatically load any shared examples or contexts
 Dir['./spec/support/**/*.rb'].sort.each { |f| require f }
+
+analytics_config = nil
+
+FIXTURES_DIR = File.join(__dir__, 'fixtures')
 
 RSpec.shared_context :stubbed_logger do
   let(:logger) { instance_double('PDK::Logger').as_null_object }
@@ -43,16 +49,38 @@ RSpec.shared_context :stubbed_logger do
   end
 end
 
+RSpec.shared_context :stubbed_analytics do
+  let(:analytics) { PDK::Analytics::Client::Noop.new(logger: logger) }
+
+  before(:each) do |example|
+    allow(PDK).to receive(:analytics).and_return(analytics) if example.metadata[:use_stubbed_analytics]
+  end
+end
+
 RSpec.configure do |c|
   c.define_derived_metadata do |metadata|
     metadata[:use_stubbed_logger] = true unless metadata.key?(:use_stubbed_logger)
+    metadata[:use_stubbed_analytics] = true unless metadata.key?(:use_stubbed_analytics)
   end
 
   c.include_context :stubbed_logger
+  c.include_context :stubbed_analytics
+
+  c.before(:suite) do
+    analytics_config = Tempfile.new('analytics.yml')
+    analytics_config.write(YAML.dump(disabled: true))
+    analytics_config.close
+    ENV['PDK_ANALYTICS_CONFIG'] = analytics_config.path
+  end
+
+  c.after(:suite) do
+    analytics_config.unlink
+  end
 
   # This should catch any tests where we are not mocking out the actual calls to Rubygems.org
   c.before(:each) do
     allow(Gem::SpecFetcher).to receive(:fetcher).and_raise('Unmocked call to Gem::SpecFetcher.fetcher!')
+    ENV['PDK_DISABLE_ANALYTICS'] = 'true'
   end
 
   c.add_setting :root
@@ -68,5 +96,31 @@ RSpec.shared_context :validators do
       PDK::Validate::RubyValidator,
       PDK::Validate::TasksValidator,
     ]
+  end
+end
+
+# Add method to StringIO needed for TTY::TestPrompt to work on tty-prompt >=
+# 0.19 (see https://github.com/piotrmurach/tty-prompt/issues/104)
+class StringIO
+  def wait_readable(*)
+    true
+  end
+end
+
+module OS
+  def self.windows?
+    (%r{cygwin|mswin|mingw|bccwin|wince|emx} =~ RUBY_PLATFORM) != nil
+  end
+
+  def self.mac?
+    (%r{darwin} =~ RUBY_PLATFORM) != nil
+  end
+
+  def self.unix?
+    !OS.windows?
+  end
+
+  def self.linux?
+    OS.unix? && !OS.mac?
   end
 end

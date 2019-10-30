@@ -1,7 +1,3 @@
-require 'pdk'
-require 'pdk/cli/exec'
-require 'pdk/module'
-
 module PDK
   module Validate
     class BaseValidator
@@ -49,25 +45,22 @@ module PDK
         invalid = []
         matched = targets.map { |target|
           if respond_to?(:pattern)
-            if File.directory?(target)
+            if PDK::Util::Filesystem.directory?(target)
               target_root = PDK::Util.module_root
-              pattern_glob = Array(pattern).map { |p| Dir.glob(File.join(target_root, p), File::FNM_DOTMATCH) }
-
-              target_list = pattern_glob.flatten.map do |file|
-                if File.fnmatch(File.join(File.expand_path(target), '*'), file, File::FNM_DOTMATCH)
-                  Pathname.new(file).relative_path_from(Pathname.new(PDK::Util.module_root)).to_s
-                end
-              end
+              pattern_glob = Array(pattern).map { |p| PDK::Util::Filesystem.glob(File.join(target_root, p), File::FNM_DOTMATCH) }
+              target_list = pattern_glob.flatten
+                                        .select { |glob| PDK::Util::Filesystem.fnmatch(File.join(PDK::Util::Filesystem.expand_path(PDK::Util.canonical_path(target)), '*'), glob, File::FNM_DOTMATCH) }
+                                        .map { |glob| Pathname.new(glob).relative_path_from(Pathname.new(PDK::Util.module_root)).to_s }
 
               ignore_list = ignore_pathspec
               target_list = target_list.reject { |file| ignore_list.match(file) }
 
               skipped << target if target_list.flatten.empty?
               target_list
-            elsif File.file?(target)
+            elsif PDK::Util::Filesystem.file?(target)
               if Array(pattern).include? target
                 target
-              elsif Array(pattern).any? { |p| File.fnmatch(File.expand_path(p), File.expand_path(target), File::FNM_DOTMATCH) }
+              elsif Array(pattern).any? { |p| PDK::Util::Filesystem.fnmatch(PDK::Util::Filesystem.expand_path(p), PDK::Util::Filesystem.expand_path(target), File::FNM_DOTMATCH) }
                 target
               else
                 skipped << target
@@ -85,6 +78,8 @@ module PDK
       end
 
       def self.ignore_pathspec
+        require 'pdk/module'
+
         ignore_pathspec = PDK::Module.default_ignored_pathspec(ignore_dotfiles?)
 
         if respond_to?(:pattern_ignore)
@@ -139,6 +134,8 @@ module PDK
       end
 
       def self.invoke(report, options = {})
+        require 'pdk/cli/exec/command'
+
         targets, skipped, invalid = parse_targets(options)
 
         process_skipped(report, skipped)
@@ -157,6 +154,7 @@ module PDK
         if self::INVOKE_STYLE == :per_target
           targets = targets.combination(1).to_a
         else
+          require 'pdk/cli/exec_group'
           targets = targets.each_slice(1000).to_a
           options[:split_exec] = PDK::CLI::ExecGroup.new(spinner_text(targets), parallel: false)
         end

@@ -1,6 +1,3 @@
-require 'pdk/cli/util/option_validator'
-require 'pdk/report'
-
 module PDK::CLI
   @test_unit_cmd = @test_cmd.define_command do
     name 'unit'
@@ -15,6 +12,7 @@ module PDK::CLI
     flag :c, 'clean-fixtures', _('Clean up downloaded fixtures after the test run.')
 
     option nil, :tests, _('Specify a comma-separated list of unit test files to run.'), argument: :required, default: '' do |values|
+      require 'pdk/cli/util/option_validator'
       PDK::CLI::Util::OptionValidator.comma_separated_list?(values)
     end
 
@@ -23,6 +21,8 @@ module PDK::CLI
 
     run do |opts, _args, _cmd|
       require 'pdk/tests/unit'
+      require 'pdk/report'
+      require 'pdk/util/bundler'
 
       PDK::CLI::Util.validate_puppet_version_opts(opts)
 
@@ -33,10 +33,22 @@ module PDK::CLI
 
       PDK::CLI::Util.module_version_check
 
+      PDK::CLI::Util.analytics_screen_view('test_unit', opts)
+
+      # Ensure that the bundled gems are up to date and correct Ruby is activated before running or listing tests.
+      puppet_env = PDK::CLI::Util.puppet_from_opts_or_env(opts)
+      PDK::Util::PuppetVersion.fetch_puppet_dev if opts[:'puppet-dev']
+      PDK::Util::RubyVersion.use(puppet_env[:ruby_version])
+
+      opts.merge!(puppet_env[:gemset])
+
+      PDK::Util::Bundler.ensure_bundle!(puppet_env[:gemset])
+
       report = nil
 
       if opts[:list]
-        examples = PDK::Test::Unit.list
+        examples = PDK::Test::Unit.list(opts)
+
         if examples.empty?
           puts _('No unit test files with examples were found.')
         else
@@ -58,22 +70,15 @@ module PDK::CLI
 
         report = PDK::Report.new
         report_formats = if opts[:format]
+                           opts[:interactive] = false
                            PDK::CLI::Util::OptionNormalizer.report_formats(opts[:format])
                          else
+                           opts[:interactive] = true
                            [{
                              method: PDK::Report.default_format,
                              target: PDK::Report.default_target,
                            }]
                          end
-
-        # Ensure that the bundled gems are up to date and correct Ruby is activated before running tests.
-        puppet_env = PDK::CLI::Util.puppet_from_opts_or_env(opts)
-        PDK::Util::PuppetVersion.fetch_puppet_dev if opts.key?(:'puppet-dev')
-        PDK::Util::RubyVersion.use(puppet_env[:ruby_version])
-
-        opts.merge!(puppet_env[:gemset])
-
-        PDK::Util::Bundler.ensure_bundle!(puppet_env[:gemset])
 
         exit_code = PDK::Test::Unit.invoke(report, opts)
 

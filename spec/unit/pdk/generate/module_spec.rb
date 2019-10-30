@@ -97,7 +97,7 @@ describe PDK::Generate::Module do
         allow(described_class).to receive(:prepare_module_directory).with(temp_target_dir)
         allow(File).to receive(:open).with(%r{pdk-test-writable}, anything) { raise Errno::EACCES unless target_parent_writeable }
         allow(FileUtils).to receive(:rm_f).with(%r{pdk-test-writable})
-        allow(test_template_dir).to receive(:render).and_yield('test_file_path', 'test_file_content')
+        allow(test_template_dir).to receive(:render).and_yield('test_file_path', 'test_file_content', :manage)
       end
 
       context 'when the parent directory of the target is not writable' do
@@ -122,7 +122,7 @@ describe PDK::Generate::Module do
         let(:content) { 'test_file_content' }
 
         before(:each) do
-          allow(test_template_dir).to receive(:render).and_yield('test_file_path', content)
+          allow(test_template_dir).to receive(:render).and_yield('test_file_path', content, :manage)
         end
 
         it 'writes the rendered files from the template to the temporary directory' do
@@ -130,6 +130,36 @@ describe PDK::Generate::Module do
 
           test_template_file.rewind
           expect(test_template_file.read).to eq(content + "\n")
+        end
+      end
+
+      context 'when the module template contains unmanaged template files' do
+        let(:content) { 'test_file_content' }
+
+        before(:each) do
+          allow(test_template_dir).to receive(:render).and_yield('test_file_path', content, :unmanage)
+        end
+
+        it 'writes the rendered files from the template to the temporary directory' do
+          described_class.invoke(invoke_opts)
+
+          test_template_file.rewind
+          expect(test_template_file.read).to eq(content + "\n")
+        end
+      end
+
+      context 'when the module template contains files with delete option set' do
+        let(:content) { 'test_file_content' }
+
+        before(:each) do
+          allow(test_template_dir).to receive(:render).and_yield('test_file_path', content, :delete)
+        end
+
+        it 'does not writes the deleted files from the template to the temporary directory' do
+          described_class.invoke(invoke_opts)
+
+          test_template_file.rewind
+          expect(test_template_file.read).to eq('')
         end
       end
 
@@ -274,7 +304,6 @@ describe PDK::Generate::Module do
     end
 
     subject(:answers) do
-      allow($stdout).to receive(:puts).with(a_string_matching(%r{questions}))
       interview_metadata
       PDK.answers
     end
@@ -288,6 +317,10 @@ describe PDK::Generate::Module do
       allow(TTY::Prompt).to receive(:new).and_return(prompt)
       prompt.input << responses.join("\r") + "\r"
       prompt.input.rewind
+
+      allow($stdout).to receive(:puts).with(a_string_matching(%r{manually updating the metadata.json file}m))
+      allow($stdout).to receive(:puts).with(a_string_matching(%r{ask you \d+ questions}))
+      allow($stdout).to receive(:puts).with(no_args)
     end
 
     context 'when only interviewing for specific missing fields' do
@@ -313,8 +346,6 @@ describe PDK::Generate::Module do
       end
 
       it 'populates the metadata object based on user input' do
-        allow($stdout).to receive(:puts).with(a_string_matching(%r{update the metadata\.json.+1 question}m))
-
         expected_metadata = PDK::Module::Metadata.new.update!(default_metadata).data.dup
         expected_metadata['source'] = 'https://something'
 
@@ -329,8 +360,6 @@ describe PDK::Generate::Module do
         end
 
         it 'does not reinterview for the module name' do
-          allow($stdout).to receive(:puts).with(a_string_matching(%r{update the metadata\.json.+1 question}m))
-
           expected_metadata = PDK::Module::Metadata.new.update!(default_metadata).data.dup
           expected_metadata['source'] = 'https://something'
 
@@ -365,8 +394,6 @@ describe PDK::Generate::Module do
         end
 
         it 'populates the Metadata object based on user input' do
-          allow($stdout).to receive(:puts).with(a_string_matching(%r{create the metadata\.json.+9 questions}m))
-
           expect(interview_metadata).to include(
             'name'                    => 'foo-bar',
             'version'                 => '2.2.0',
@@ -387,7 +414,7 @@ describe PDK::Generate::Module do
               },
               {
                 'operatingsystem'        => 'RedHat',
-                'operatingsystemrelease' => ['7'],
+                'operatingsystemrelease' => ['8'],
               },
               {
                 'operatingsystem'        => 'Scientific',
@@ -395,15 +422,15 @@ describe PDK::Generate::Module do
               },
               {
                 'operatingsystem'        => 'Debian',
-                'operatingsystemrelease' => ['8'],
+                'operatingsystemrelease' => ['9'],
               },
               {
                 'operatingsystem'        => 'Ubuntu',
-                'operatingsystemrelease' => ['16.04'],
+                'operatingsystemrelease' => ['18.04'],
               },
               {
                 'operatingsystem'        => 'windows',
-                'operatingsystemrelease' => ['2008 R2', '2012 R2', '10'],
+                'operatingsystemrelease' => %w[2019 10],
               },
             ],
           )
@@ -451,8 +478,6 @@ describe PDK::Generate::Module do
         end
 
         it 'populates the interview question defaults with existing metadata values' do
-          allow($stdout).to receive(:puts).with(a_string_matching(%r{9 questions}))
-
           expect(interview_metadata).to include(
             'name'    => 'defaultauthor-bar',
             'version' => '0.0.1',
@@ -492,8 +517,6 @@ describe PDK::Generate::Module do
       end
 
       it 'populates the Metadata object based on user input for both module name and forge name' do
-        allow($stdout).to receive(:puts).with(a_string_matching(%r{4 questions}))
-
         expect(interview_metadata).to include(
           'name'         => 'myforgename-mymodule',
           'version'      => '0.1.0',
@@ -521,8 +544,6 @@ describe PDK::Generate::Module do
       end
 
       it 'populates the Metadata object based on user input' do
-        allow($stdout).to receive(:puts).with(a_string_matching(%r{3 questions}m))
-
         expect(interview_metadata).to include(
           'name'         => 'foo-bar',
           'version'      => '0.1.0',
@@ -557,8 +578,6 @@ describe PDK::Generate::Module do
 
       it 'exits cleanly' do
         allow(logger).to receive(:info).with(a_string_matching(%r{interview cancelled}i))
-        allow($stdout).to receive(:puts).with(a_string_matching(%r{4 questions}m))
-
         expect { interview_metadata }.to exit_zero
       end
     end
@@ -578,8 +597,6 @@ describe PDK::Generate::Module do
 
       it 'exits cleanly' do
         allow(logger).to receive(:info).with(a_string_matching(%r{Process cancelled; exiting.}i))
-        allow($stdout).to receive(:puts).with(a_string_matching(%r{4 questions}m))
-
         expect { interview_metadata }.to exit_zero
       end
     end
@@ -644,15 +661,15 @@ describe PDK::Generate::Module do
           'operatingsystem_support' => [
             {
               'operatingsystem'        => 'Debian',
-              'operatingsystemrelease' => ['8'],
+              'operatingsystemrelease' => ['9'],
             },
             {
               'operatingsystem'        => 'Ubuntu',
-              'operatingsystemrelease' => ['16.04'],
+              'operatingsystemrelease' => ['18.04'],
             },
             {
               'operatingsystem'        => 'windows',
-              'operatingsystemrelease' => ['2008 R2', '2012 R2', '10'],
+              'operatingsystemrelease' => %w[2019 10],
             },
             {
               'operatingsystem'        => 'Solaris',

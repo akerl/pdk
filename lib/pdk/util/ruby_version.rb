@@ -1,4 +1,4 @@
-require 'pdk/util'
+require 'forwardable'
 
 module PDK
   module Util
@@ -8,6 +8,8 @@ module PDK
 
         def_delegators :instance, :gem_path, :gem_paths_raw, :gem_home, :available_puppet_versions, :bin_path
 
+        # TODO: resolve this
+        # rubocop:disable Lint/DuplicateMethods
         attr_reader :instance
 
         def instance(version = nil)
@@ -21,6 +23,7 @@ module PDK
           end
           @instance[active_ruby_version]
         end
+        # rubocop:enable Lint/DuplicateMethods
 
         def active_ruby_version
           @active_ruby_version || default_ruby_version
@@ -37,6 +40,8 @@ module PDK
         end
 
         def scan_for_packaged_rubies
+          require 'pdk/util'
+
           ruby_basedir = File.join(PDK::Util.pdk_package_basedir, 'private', 'ruby', '*')
           Dir[ruby_basedir].sort.map { |ruby_dir|
             version = File.basename(ruby_dir)
@@ -45,12 +50,22 @@ module PDK
         end
 
         def default_ruby_version
-          # For now, the packaged versions will be using default of 2.4.5
-          # FIXME: make this dynamic
-          return '2.4.5' if PDK::Util.package_install?
+          require 'pdk/util'
+          require 'pdk/util/puppet_version'
 
-          # TODO: may not be a safe assumption that highest available version should be default
-          latest_ruby_version
+          @default_ruby_version ||= if PDK::Util.package_install?
+                                      # Default to the ruby that supports the latest puppet gem. If you wish to default to a
+                                      # specific Puppet Gem version use the following example;
+                                      #
+                                      # PDK::Util::PuppetVersion.find_gem_for('5.5.10')[:ruby_version]
+                                      #
+                                      PDK::Util::PuppetVersion.latest_available[:ruby_version]
+                                    else
+                                      # TODO: may not be a safe assumption that highest available version should be default
+                                      # WARNING Do NOT use PDK::Util::PuppetVersion.*** methods as it can recurse into this
+                                      # method and cause Stack Level Too Deep errors.
+                                      latest_ruby_version
+                                    end
         end
 
         def latest_ruby_version
@@ -58,6 +73,8 @@ module PDK
         end
 
         def versions
+          require 'pdk/util'
+
           @versions ||= if PDK::Util.package_install?
                           scan_for_packaged_rubies
                         else
@@ -73,6 +90,8 @@ module PDK
       end
 
       def bin_path
+        require 'pdk/util'
+
         if PDK::Util.package_install?
           File.join(PDK::Util.pdk_package_basedir, 'private', 'ruby', ruby_version, 'bin')
         else
@@ -81,6 +100,8 @@ module PDK
       end
 
       def gem_paths_raw
+        require 'pdk/util'
+
         if PDK::Util.package_install?
           # Subprocesses use their own set of gems which are managed by pdk or
           # installed with the package. We also include the separate gem path
@@ -104,6 +125,8 @@ module PDK
       end
 
       def gem_home
+        require 'pdk/util'
+
         # `bundle install --path` ignores all "system" installed gems and
         # causes unnecessary package installs. `bundle install` (without
         # --path) installs into GEM_HOME, which by default is non-user

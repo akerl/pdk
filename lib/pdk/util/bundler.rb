@@ -1,15 +1,11 @@
-require 'bundler'
-require 'digest'
-require 'fileutils'
-require 'pdk/util'
-require 'pdk/cli/exec'
-
 module PDK
   module Util
     module Bundler
       class BundleHelper; end
 
       def self.ensure_bundle!(gem_overrides = nil)
+        require 'fileutils'
+
         bundle = BundleHelper.new
 
         # This will default ensure_bundle! to re-resolving everything to latest
@@ -70,6 +66,8 @@ module PDK
       end
 
       def self.bundle_cache_key(gemfile, gem_overrides)
+        require 'digest'
+
         override_sig = (gem_overrides || {}).sort_by { |gem, _| gem.to_s }.to_s
         Digest::MD5.hexdigest(gemfile.to_s + override_sig)
       end
@@ -77,11 +75,12 @@ module PDK
 
       class BundleHelper
         def gemfile
+          require 'pdk/util'
           @gemfile ||= PDK::Util.find_upwards('Gemfile')
         end
 
         def gemfile_lock
-          return nil if gemfile.nil?
+          return if gemfile.nil?
           @gemfile_lock ||= File.join(File.dirname(gemfile), 'Gemfile.lock')
         end
 
@@ -104,14 +103,14 @@ module PDK
 
           result = cmd.execute!
 
-          unless result[:exit_code].zero?
-            PDK.logger.debug(result.values_at(:stdout, :stderr).join("\n"))
-          end
-
           result[:exit_code].zero?
         end
 
         def lock!
+          require 'pdk/util'
+          require 'fileutils'
+          require 'pdk/util/ruby_version'
+
           if PDK::Util.package_install?
             # In packaged installs, use vendored Gemfile.lock as a starting point.
             # Subsequent 'bundle install' will still pick up any new dependencies.
@@ -140,7 +139,7 @@ module PDK
             result = cmd.execute!
 
             unless result[:exit_code].zero?
-              PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n"))
+              PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n")) unless PDK.logger.debug?
               raise PDK::CLI::FatalError, _('Unable to resolve default Gemfile dependencies.')
             end
 
@@ -181,7 +180,7 @@ module PDK
           result = cmd.execute!
 
           unless result[:exit_code].zero?
-            PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n"))
+            PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n")) unless PDK.logger.debug?
             raise PDK::CLI::FatalError, _('Unable to resolve Gemfile dependencies.')
           end
 
@@ -189,6 +188,8 @@ module PDK
         end
 
         def install!(gem_overrides = {})
+          require 'pdk/util/ruby_version'
+
           argv = ['install', "--gemfile=#{gemfile}"]
           argv << '-j4' unless Gem.win_platform? && Gem::Version.new(PDK::Util::RubyVersion.active_ruby_version) < Gem::Version.new('2.3.5')
 
@@ -200,7 +201,7 @@ module PDK
           result = cmd.execute!
 
           unless result[:exit_code].zero?
-            PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n"))
+            PDK.logger.fatal(result.values_at(:stdout, :stderr).join("\n")) unless PDK.logger.debug?
             raise PDK::CLI::FatalError, _('Unable to install missing Gemfile dependencies.')
           end
 
@@ -215,7 +216,7 @@ module PDK
           result = cmd.execute!
 
           unless result[:exit_code].zero?
-            PDK.logger.fatal(_("Failed to generate binstubs for '%{gems}':\n%{output}") % { gems: gems.join(' '), output: result.values_at(:stdout, :stderr).join("\n") })
+            PDK.logger.fatal(_("Failed to generate binstubs for '%{gems}':\n%{output}") % { gems: gems.join(' '), output: result.values_at(:stdout, :stderr).join("\n") }) unless PDK.logger.debug?
             raise PDK::CLI::FatalError, _('Unable to install requested binstubs.')
           end
 
@@ -243,6 +244,9 @@ module PDK
         end
 
         def bundle_command(*args)
+          require 'pdk/cli/exec'
+          require 'pdk/cli/exec/command'
+
           PDK::CLI::Exec::Command.new(PDK::CLI::Exec.bundle_bin, *args).tap do |c|
             c.context = :module
           end

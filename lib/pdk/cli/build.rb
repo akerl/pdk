@@ -1,5 +1,3 @@
-require 'pdk/cli/util'
-
 module PDK::CLI
   @build_cmd = @base_cmd.define_command do
     name 'build'
@@ -14,12 +12,16 @@ module PDK::CLI
 
     run do |opts, _args, _cmd|
       require 'pdk/module/build'
+      require 'pdk/module/metadata'
+      require 'pdk/cli/util'
 
       # Make sure build is being run in a valid module directory with a metadata.json
       PDK::CLI::Util.ensure_in_module!(
         message:   _('`pdk build` can only be run from inside a valid module with a metadata.json.'),
         log_level: :info,
       )
+
+      PDK::CLI::Util.analytics_screen_view('build', opts)
 
       module_metadata = PDK::Module::Metadata.from_file('metadata.json')
 

@@ -19,6 +19,10 @@ module PDK::CLI
         raise PDK::CLI::ExitWithError, _("'%{name}' is not a valid provider name") % { name: provider_name }
       end
 
+      PDK::CLI::Util.analytics_screen_view('new_provider', opts)
+
+      require 'pdk/generate/provider'
+
       PDK::Generate::Provider.new(module_dir, provider_name, opts).run
     end
   end

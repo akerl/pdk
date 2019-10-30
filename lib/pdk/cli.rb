@@ -1,20 +1,58 @@
 require 'cri'
 
+require 'pdk/analytics'
 require 'pdk/cli/errors'
 require 'pdk/cli/util'
 require 'pdk/cli/util/command_redirector'
 require 'pdk/cli/util/option_normalizer'
 require 'pdk/cli/util/option_validator'
-require 'pdk/cli/exec_group'
-require 'pdk/generate/module'
+require 'pdk/config'
 require 'pdk/i18n'
 require 'pdk/logger'
 require 'pdk/report'
 require 'pdk/util/version'
 require 'pdk/util/puppet_version'
+require 'pdk/util/filesystem'
+
+class Cri::Command::CriExitException
+  def initialize(is_error:)
+    @is_error = is_error
+    PDK.analytics.event('CLI', 'invalid command', label: PDK::CLI.anonymised_args.join(' ')) if error?
+  end
+end
 
 module PDK::CLI
+  # Attempt to anonymise the raw ARGV array if the command parsing failed.
+  #
+  # If an item does not start with '-' but is preceeded by an item that does
+  # start with '-', assume that these items are an option/value pair and redact
+  # the value. Any additional values that do not start with '-' that follow an
+  # option/value pair are assumed to be arguments (rather than subcommand
+  # names) and are also redacted.
+  #
+  # @example
+  #   # Where PDK::CLI.args => ['new', 'plan', '--some', 'value', 'plan_name']
+  #
+  #   PDK::CLI.anonymised_args
+  #     => ['new', 'plan', '--some', 'redacted', 'redacted']
+  #
+  # @return Array[String] the command arguments with any identifying values
+  #   redacted.
+  def self.anonymised_args
+    in_args = false
+    @args.map do |arg|
+      if arg.start_with?('-')
+        in_args = true
+        arg
+      else
+        in_args ? 'redacted' : arg
+      end
+    end
+  end
+
   def self.run(args)
+    @args = args
+    PDK::Config.analytics_config_interview! unless ENV['PDK_DISABLE_ANALYTICS'] || PDK::Config.analytics_config_exist?
     @base_cmd.run(args)
   rescue PDK::CLI::ExitWithError => e
     PDK.logger.send(e.log_level, e.message)
@@ -39,6 +77,8 @@ module PDK::CLI
   end
 
   def self.template_url_option(dsl)
+    require 'pdk/util/template_uri'
+
     desc = _('Specifies the URL to the template to use when creating new modules or classes. (default: %{default_url})') % { default_url: PDK::Util::TemplateURI.default_template_uri }
 
     dsl.option nil, 'template-url', desc, argument: :required
@@ -100,18 +140,21 @@ module PDK::CLI
     end
 
     option nil, 'answer-file', _('Path to an answer file.'), argument: :required, hidden: true do |value|
+      require 'pdk/answer_file'
       PDK.answer_file = value
     end
   end
 
   require 'pdk/cli/bundle'
   require 'pdk/cli/build'
+  require 'pdk/cli/config'
   require 'pdk/cli/convert'
   require 'pdk/cli/new'
   require 'pdk/cli/test'
   require 'pdk/cli/update'
   require 'pdk/cli/validate'
   require 'pdk/cli/module'
+  require 'pdk/cli/console'
 
   @base_cmd.add_command Cri::Command.new_basic_help
 end

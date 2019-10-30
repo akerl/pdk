@@ -1,29 +1,46 @@
-require 'pdk'
-require 'pdk/cli/exec'
-require 'pdk/util/bundler'
-require 'json'
-
 module PDK
   module Test
     class Unit
       def self.cmd(tests, opts = {})
-        rake_args = opts.key?(:parallel) ? 'parallel_spec_standalone' : 'spec_standalone'
-        rake_args += "[#{tests}]" unless tests.nil?
+        rake_args = opts[:parallel] ? 'parallel_spec_standalone' : 'spec_standalone'
+        rake_args += "[#{tests}]" unless tests.nil? || tests.empty?
         rake_args
       end
 
       def self.rake_bin
+        require 'pdk/util'
+
         @rake ||= File.join(PDK::Util.module_root, 'bin', 'rake')
       end
 
-      def self.rake(task, spinner_text, environment = {})
+      def self.cmd_with_args(task)
+        require 'pdk/util/ruby_version'
+
         argv = [rake_bin, task]
         argv.unshift(File.join(PDK::Util::RubyVersion.bin_path, 'ruby.exe')) if Gem.win_platform?
+        argv
+      end
 
-        command = PDK::CLI::Exec::Command.new(*argv).tap do |c|
+      def self.rake(task, spinner_text, environment = {})
+        require 'pdk/cli/exec/command'
+
+        command = PDK::CLI::Exec::Command.new(*cmd_with_args(task)).tap do |c|
           c.context = :module
-          c.add_spinner(spinner_text)
+          c.add_spinner(spinner_text) if spinner_text
           c.environment = environment
+        end
+
+        command.execute!
+      end
+
+      def self.interactive_rake(task, environment)
+        require 'pdk/cli/exec/interactive_command'
+
+        command = PDK::CLI::Exec::InteractiveCommand.new(*cmd_with_args(task)).tap do |c|
+          c.context = :module
+          c.environment = environment.reject do |key, _|
+            key == 'CI_SPEC_OPTIONS'
+          end
         end
 
         command.execute!
@@ -64,31 +81,40 @@ module PDK
       end
 
       def self.invoke(report, options = {})
+        require 'pdk/util'
+        require 'pdk/util/bundler'
+
         PDK::Util::Bundler.ensure_binstubs!('rake', 'rspec-core')
 
         setup
 
-        tests = options.fetch(:tests)
+        tests = options[:tests]
 
         environment = { 'CI_SPEC_OPTIONS' => '--format j' }
         environment['PUPPET_GEM_VERSION'] = options[:puppet] if options[:puppet]
-        spinner_msg = options.key?(:parallel) ? _('Running unit tests in parallel.') : _('Running unit tests.')
+        spinner_msg = options[:parallel] ? _('Running unit tests in parallel.') : _('Running unit tests.')
+
+        if options[:interactive]
+          result = interactive_rake(cmd(tests, options), environment)
+          return result[:exit_code]
+        end
+
         result = rake(cmd(tests, options), spinner_msg, environment)
 
-        json_result = if options.key?(:parallel)
+        json_result = if options[:parallel]
                         PDK::Util.find_all_json_in(result[:stdout])
                       else
                         PDK::Util.find_first_json_in(result[:stdout])
                       end
 
-        if parallel_with_no_tests?(options.key?(:parallel), json_result, result)
+        if parallel_with_no_tests?(options[:parallel], json_result, result)
           json_result = [{ 'messages' => ['No examples found.'] }]
           result[:exit_code] = 0
         end
 
         raise PDK::CLI::FatalError, _('Unit test output did not contain a valid JSON result: %{output}') % { output: result[:stdout] } if json_result.nil? || json_result.empty?
 
-        json_result = merge_json_results(json_result) if options.key?(:parallel)
+        json_result = merge_json_results(json_result) if options[:parallel]
 
         parse_output(report, json_result, result[:duration])
 
@@ -183,15 +209,16 @@ module PDK
       end
 
       # @return array of { :id, :full_description }
-      def self.list
+      def self.list(options = {})
+        require 'pdk/util'
+        require 'pdk/util/bundler'
+
         PDK::Util::Bundler.ensure_binstubs!('rake')
 
-        command_argv = [File.join(PDK::Util.module_root, 'bin', 'rake'), 'spec_list_json']
-        command_argv.unshift(File.join(PDK::Util::RubyVersion.bin_path, 'ruby.exe')) if Gem.win_platform?
+        environment = {}
+        environment['PUPPET_GEM_VERSION'] = options[:puppet] if options[:puppet]
 
-        list_command = PDK::CLI::Exec::Command.new(*command_argv)
-        list_command.context = :module
-        output = list_command.execute!
+        output = rake('spec_list_json', _('Finding unit tests.'), environment)
 
         rspec_json = PDK::Util.find_first_json_in(output[:stdout])
         raise PDK::CLI::FatalError, _('Failed to find valid JSON in output from rspec: %{output}' % { output: output[:stdout] }) unless rspec_json

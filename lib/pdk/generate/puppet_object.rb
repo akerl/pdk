@@ -1,12 +1,3 @@
-require 'fileutils'
-
-require 'pdk'
-require 'pdk/logger'
-require 'pdk/module/metadata'
-require 'pdk/module/templatedir'
-require 'pdk/template_file'
-require 'pdk/util/filesystem'
-
 module PDK
   module Generate
     class PuppetObject
@@ -45,6 +36,10 @@ module PDK
         end
       end
 
+      def spec_only?
+        @options[:spec_only]
+      end
+
       # @abstract Subclass and implement {#template_data} to provide data to
       #   the templates during rendering. Implementations of this method should
       #   return a Hash!{Symbol => Object}.
@@ -81,6 +76,13 @@ module PDK
         nil
       end
 
+      # @abstract Subclass and implement {#target_device_path}. Implementations
+      #   of this method should return a String containing the destination path
+      #   of the device class being generated.
+      def target_device_path
+        nil
+      end
+
       # Retrieves the type of the object being generated, e.g. :class,
       # :defined_type, etc. This is specified in the subclass' OBJECT_TYPE
       # constant.
@@ -92,6 +94,37 @@ module PDK
         self.class::OBJECT_TYPE
       end
 
+      # Retrieves the type of the object being generated as represented in
+      # the JSON output of puppet-strings.
+      #
+      # @return [String] the type of the object being generated or nil if
+      #   there is no mapping.
+      #
+      # @api private
+      def self.puppet_strings_type
+        return nil unless const_defined?(:PUPPET_STRINGS_TYPE)
+
+        self::PUPPET_STRINGS_TYPE
+      end
+
+      # Returns an array of possible target path strings.
+      def targets
+        targets = [
+          target_spec_path,
+          target_type_spec_path,
+        ]
+
+        unless spec_only?
+          targets += [
+            target_object_path,
+            target_type_path,
+            target_device_path,
+          ]
+        end
+
+        targets.compact
+      end
+
       # Check preconditions of this template group. By default this only makes sure that the target files do not
       # already exist. Override this (and call super) to add your own preconditions.
       #
@@ -99,14 +132,28 @@ module PDK
       #
       # @api public
       def check_preconditions
-        [target_object_path, target_type_path, target_spec_path, target_type_spec_path].compact.each do |target_file|
-          next unless File.exist?(target_file)
+        require 'pdk/util/filesystem'
+
+        targets.each do |target_file|
+          next unless PDK::Util::Filesystem.exist?(target_file)
 
           raise PDK::CLI::ExitWithError, _("Unable to generate %{object_type}; '%{file}' already exists.") % {
             file:        target_file,
-            object_type: object_type,
+            object_type: spec_only? ? 'unit test' : object_type,
           }
         end
+      end
+
+      # Check the preconditions of this template group, behaving as a
+      # predicate rather than raising an exception.
+      #
+      # @return [Boolean] true if the generator is safe to run, otherwise
+      #   false.
+      def can_run?
+        check_preconditions
+        true
+      rescue PDK::CLI::ExitWithError
+        false
       end
 
       # Check that the templates can be rendered. Find an appropriate template
@@ -123,8 +170,9 @@ module PDK
         with_templates do |template_path, config_hash|
           data = template_data.merge(configs: config_hash)
 
-          render_file(target_object_path, template_path[:object], data)
+          render_file(target_object_path, template_path[:object], data) unless spec_only?
           render_file(target_type_path, template_path[:type], data) if template_path[:type]
+          render_file(target_device_path, template_path[:device], data) if template_path[:device]
           render_file(target_spec_path, template_path[:spec], data) if template_path[:spec]
           render_file(target_type_spec_path, template_path[:type_spec], data) if template_path[:type_spec]
         end
@@ -148,6 +196,8 @@ module PDK
       #
       # @api private
       def render_file(dest_path, template_path, data)
+        require 'pdk/template_file'
+
         write_file(dest_path) do
           PDK::TemplateFile.new(template_path, data).render
         end
@@ -168,12 +218,15 @@ module PDK
       #
       # @api private
       def write_file(dest_path)
+        require 'pdk/logger'
+        require 'pdk/util/filesystem'
+
         PDK.logger.info(_("Creating '%{file}' from template.") % { file: dest_path })
 
         file_content = yield
 
         begin
-          FileUtils.mkdir_p(File.dirname(dest_path))
+          PDK::Util::Filesystem.mkdir_p(File.dirname(dest_path))
         rescue SystemCallError => e
           raise PDK::CLI::FatalError, _("Unable to create directory '%{path}': %{message}") % {
             path:    File.dirname(dest_path),
@@ -204,6 +257,10 @@ module PDK
       #
       # @api private
       def with_templates
+        require 'pdk/logger'
+        require 'pdk/module/templatedir'
+        require 'pdk/util/template_uri'
+
         templates.each do |template|
           if template[:uri].nil?
             PDK.logger.debug(_('No %{dir_type} template found; trying next template directory.') % { dir_type: template[:type] })
@@ -219,9 +276,9 @@ module PDK
               # TODO: refactor to a search-and-execute form instead
               return # work is done # rubocop:disable Lint/NonLocalExitFromIterator
             elsif template[:allow_fallback]
-              PDK.logger.debug(_('Unable to find a %{type} template in %{url}; trying next template directory.') % { type: object_type, url: template[:url] })
+              PDK.logger.debug(_('Unable to find a %{type} template in %{url}; trying next template directory.') % { type: object_type, url: template[:uri] })
             else
-              raise PDK::CLI::FatalError, _('Unable to find the %{type} template in %{url}.') % { type: object_type, url: template[:url] }
+              raise PDK::CLI::FatalError, _('Unable to find the %{type} template in %{url}.') % { type: object_type, url: template[:uri] }
             end
           end
         end
@@ -250,34 +307,28 @@ module PDK
       #
       # @api private
       def templates
+        require 'pdk/util/template_uri'
+
         @templates ||= PDK::Util::TemplateURI.templates(@options)
       end
 
       # Retrieves the name of the module (without the forge username) from the
       # module metadata.
       #
-      # @raise (see #module_metadata)
       # @return [String] The name of the module.
       #
       # @api private
       def module_name
-        @module_name ||= module_metadata.data['name'].rpartition('-').last
+        require 'pdk/util'
+
+        @module_name ||= PDK::Util.module_metadata['name'].rpartition('-').last
+      rescue ArgumentError => e
+        raise PDK::CLI::FatalError, e
       end
 
-      # Parses the metadata.json file for the module.
-      #
-      # @raise [PDK::CLI::FatalError] if the metadata.json file does not exist,
-      #   can not be read, or contains invalid metadata.
-      #
-      # @return [PDK::Module::Metadata] the parsed module metadata.
-      #
-      # @api private
-      def module_metadata
-        @module_metadata ||= begin
-          PDK::Module::Metadata.from_file(File.join(module_dir, 'metadata.json'))
-        rescue ArgumentError => e
-          raise PDK::CLI::FatalError, _("'%{dir}' does not contain valid Puppet module metadata: %{msg}") % { dir: module_dir, msg: e.message }
-        end
+      # transform a object name into a ruby class name
+      def self.class_name_from_object_name(object_name)
+        object_name.to_s.split('_').map(&:capitalize).join
       end
     end
   end

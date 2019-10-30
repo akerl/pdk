@@ -25,6 +25,28 @@ describe PDK::Generate::PuppetObject do
     allow(PDK).to receive(:answers).and_return({})
   end
 
+  describe '#spec_only?' do
+    subject { templated_object.spec_only? }
+
+    context 'when initialised with option :spec_only => true' do
+      let(:options) { { spec_only: true } }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'when initialised with option :spec_only => false' do
+      let(:options) { { spec_only: false } }
+
+      it { is_expected.to be_falsey }
+    end
+
+    context 'when initialised without a :spec_only option' do
+      let(:options) { {} }
+
+      it { is_expected.to be_falsey }
+    end
+  end
+
   describe '#template_data' do
     it 'needs to be implemented by the subclass' do
       expect {
@@ -65,8 +87,8 @@ describe PDK::Generate::PuppetObject do
 
       it 'raises a fatal error' do
         expect {
-          templated_object.module_metadata
-        }.to raise_error(PDK::CLI::FatalError, %r{'#{module_dir}'.*not contain.*metadata})
+          templated_object.module_name
+        }.to raise_error(PDK::CLI::FatalError, %r{'#{metadata_path}'.*not exist})
       end
     end
   end
@@ -213,6 +235,78 @@ describe PDK::Generate::PuppetObject do
     end
   end
 
+  describe '#can_run?' do
+    subject { templated_object.can_run? }
+
+    include_context :with_puppet_object_module_metadata
+
+    let(:target_object_path) { '/tmp/test_module/object_file' }
+    let(:target_spec_path) { '/tmp/test_module/spec_file' }
+    let(:target_object_exists) { false }
+    let(:target_spec_exists) { false }
+
+    before(:each) do
+      allow(File).to receive(:exist?).with(target_object_path).and_return(target_object_exists)
+      allow(File).to receive(:exist?).with(target_spec_path).and_return(target_spec_exists)
+      allow(templated_object).to receive(:target_object_path).and_return(target_object_path)
+      allow(templated_object).to receive(:target_spec_path).and_return(target_spec_path)
+    end
+
+    context 'when :spec_only => false' do
+      let(:options) { { spec_only: false } }
+
+      context 'and the target object exists' do
+        let(:target_object_exists) { true }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'and the target spec exists' do
+        let(:target_spec_exists) { true }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'and both target object and spec exist' do
+        let(:target_object_exists) { true }
+        let(:target_spec_exists) { true }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'and neither target object nor spec exist' do
+        it { is_expected.to be_truthy }
+      end
+    end
+
+    context 'when :spec_only => true' do
+      let(:options) { { spec_only: true } }
+
+      context 'and the target object exists' do
+        let(:target_object_exists) { true }
+
+        it { is_expected.to be_truthy }
+      end
+
+      context 'and the target spec exists' do
+        let(:target_spec_exists) { true }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'and both target object and spec exist' do
+        let(:target_object_exists) { true }
+        let(:target_spec_exists) { true }
+
+        it { is_expected.to be_falsey }
+      end
+
+      context 'and neither target object nor spec exist' do
+        it { is_expected.to be_truthy }
+      end
+    end
+  end
+
   describe '#run' do
     include_context :with_puppet_object_module_metadata
 
@@ -250,6 +344,7 @@ describe PDK::Generate::PuppetObject do
 
     context 'when the target object file exists' do
       before(:each) do
+        allow(File).to receive(:exist?).with(target_spec_path).and_return(false)
         allow(File).to receive(:exist?).with(target_object_path).and_return(true)
       end
 
@@ -266,6 +361,46 @@ describe PDK::Generate::PuppetObject do
 
       it 'raises an error' do
         expect { templated_object.run }.to raise_error(PDK::CLI::ExitWithError, %r{'#{target_spec_path}' already exists})
+      end
+    end
+
+    context 'when only generating specs' do
+      let(:options) { { spec_only: true } }
+
+      context 'when the target spec file exists' do
+        before(:each) do
+          allow(File).to receive(:exist?).with(target_spec_path).and_return(true)
+        end
+
+        it 'raises an error' do
+          msg = %r{unable to generate unit test; '#{target_spec_path}' already exists}i
+          expect {
+            templated_object.run
+          }.to raise_error(PDK::CLI::ExitWithError, msg)
+        end
+      end
+
+      context 'when the target spec file does not exist' do
+        let(:object_template) { '/tmp/test_template/object.erb' }
+        let(:spec_template) { '/tmp/test_template/spec.erb' }
+
+        before(:each) do
+          allow(File).to receive(:exist?).with(target_spec_path).and_return(false)
+          allow(templated_object).to receive(:with_templates).and_yield({ object: object_template, spec: spec_template }, {})
+        end
+
+        after(:each) do
+          templated_object.run
+        end
+
+        it 'renders the spec file' do
+          expect(templated_object).to receive(:render_file).with(target_spec_path, spec_template, anything)
+        end
+
+        it 'does not attempt to render the object' do
+          allow(templated_object).to receive(:render_file).with(target_spec_path, anything, anything)
+          expect(templated_object).not_to receive(:render_file).with(target_object_path, anything, anything)
+        end
       end
     end
   end

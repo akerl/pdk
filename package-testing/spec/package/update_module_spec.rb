@@ -12,7 +12,7 @@ describe 'Updating an existing module' do
   modules.each do |mod|
     context "when updating #{mod}" do
       metadata = JSON.parse(open("https://raw.githubusercontent.com/#{mod}/master/metadata.json").read)
-      metadata['template-url'] = "file://#{File.join(install_dir, 'share', 'cache', 'pdk-templates.git')}"
+      metadata['template-url'] = 'pdk-default#master'
       repo_dir = File.join(home_dir, metadata['name'])
 
       describe command("#{git_bin} clone https://github.com/#{mod} #{repo_dir}") do
@@ -25,9 +25,18 @@ describe 'Updating an existing module' do
           create_remote_file(get_working_node, File.join(module_dir, 'metadata.json'), metadata.to_json)
 
           sync_yaml = YAML.safe_load(open("https://raw.githubusercontent.com/#{mod}/master/.sync.yml").read)
-          sync_yaml['Gemfile']['required'][':system_tests'] << { 'gem' => 'nokogiri', 'version' => '1.8.5' }
+
+          sync_yaml['Gemfile'].each_key do |gem_type|
+            sync_yaml['Gemfile'][gem_type].each_key do |group|
+              sync_yaml['Gemfile'][gem_type][group].select! do |gem|
+                gem['gem'] =~ %r{\Apuppet-module-(?:posix|win)-system}
+              end
+            end
+          end
+
           create_remote_file(get_working_node, File.join(module_dir, '.sync.yml'), sync_yaml.to_yaml)
         end
+
         let(:cwd) { repo_dir }
 
         its(:exit_status) { is_expected.to eq(0) }
@@ -42,7 +51,7 @@ describe 'Updating an existing module' do
           subject { super().stdout.split("\n") }
 
           it 'does not output any unexpected errors' do
-            is_expected.to all(match(%r{^(?:info|warning|error): (?:puppet-lint|rubocop|task-metadata-lint|task-name)}))
+            is_expected.to all(match(%r{^(?:info|warning|error): (?:puppet-lint|rubocop|task-metadata-lint|task-name|puppet-epp)}))
           end
         end
       end
@@ -51,14 +60,14 @@ describe 'Updating an existing module' do
         let(:cwd) { repo_dir }
 
         its(:exit_status) { is_expected.to eq(0) }
-        its(:stderr) { is_expected.to match(%r{0 failures}m) }
+        its(:stdout) { is_expected.to match(%r{0 failures}m) }
       end
 
       describe command('pdk test unit --parallel') do
         let(:cwd) { repo_dir }
 
         its(:exit_status) { is_expected.to eq(0) }
-        its(:stderr) { is_expected.to match(%r{0 failures}m) }
+        its(:stdout) { is_expected.to match(%r{0 failures}m) }
       end
 
       describe command('pdk build --force') do

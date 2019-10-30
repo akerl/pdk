@@ -1,8 +1,7 @@
-require 'pdk'
-require 'pdk/cli/exec'
 require 'pdk/validate/base_validator'
 require 'pdk/validate/puppet/puppet_lint'
 require 'pdk/validate/puppet/puppet_syntax'
+require 'pdk/validate/puppet/puppet_epp'
 
 module PDK
   module Validate
@@ -12,7 +11,7 @@ module PDK
       end
 
       def self.puppet_validators
-        [PuppetSyntax, PuppetLint]
+        [PuppetSyntax, PuppetLint, PuppetEPP]
       end
 
       def self.invoke(report, options = {})
