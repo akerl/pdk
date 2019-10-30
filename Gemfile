@@ -30,7 +30,7 @@ group :test do
   gem 'license_finder', '~> 3.0.4'
   gem 'parallel', '= 1.13.0'
   gem 'parser', '~> 2.5.1.2'
-  gem 'rake', '~> 10.0'
+  gem 'rake', '~> 13.0.0'
   gem 'rspec', '~> 3.0'
   gem 'rspec-xsd'
   gem 'rubocop', '= 0.49.1'
